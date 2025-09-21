@@ -98,7 +98,13 @@ def hyperliquid_exchange_via_proxy(config, test_account):
     # Point SDK to our local proxy server
     proxy_url = config.tdx_server_url
     account = test_account["account"]
-    return Exchange(account, base_url=proxy_url)
+    exchange = Exchange(account, base_url=proxy_url)
+    
+    # Add X-API-Key header for TDX server authentication
+    exchange.session.headers.update({"X-API-Key": config.test_api_key})
+    
+    print(f"🔧 Configured proxy Exchange with API key: {config.test_api_key}")
+    return exchange
 
 @pytest.fixture(scope="session")
 def tdx_server_client(config):
