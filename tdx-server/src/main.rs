@@ -1,6 +1,7 @@
 use axum::{
-    extract::State,
+    extract::{Request, State},
     http::StatusCode,
+    middleware::{self, Next},
     response::Json,
     routing::{get, post},
     Router,
@@ -10,6 +11,7 @@ use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 use tracing::{info, warn, error};
 
+mod auth;
 mod config;
 mod proxy;
 
@@ -43,11 +45,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config,
     };
 
-    // Build router
+    // Build router with authentication for /exchange endpoints
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/info", post(proxy_info))
         .route("/exchange", post(proxy_exchange))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            |State(state): State<AppState>, req: Request, next: Next| async move {
+                // Only apply auth to /exchange endpoints
+                if req.uri().path().starts_with("/exchange") {
+                    auth::api_key_auth(State(state), req.headers().clone(), req, next).await
+                } else {
+                    Ok(next.run(req).await)
+                }
+            }
+        ))
         .with_state(state)
         .layer(CorsLayer::permissive());
 
