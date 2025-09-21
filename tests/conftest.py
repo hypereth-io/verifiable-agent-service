@@ -100,7 +100,7 @@ def hyperliquid_exchange_via_proxy(config, test_account):
     account = test_account["account"]
     return Exchange(account, base_url=proxy_url)
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def tdx_server_client(config):
     """HTTP client for TDX server."""
     class TDXServerClient:

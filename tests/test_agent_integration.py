@@ -222,8 +222,8 @@ class TestEquivalenceTesting:
         
         print(f"📱 Master Wallet: {master_address}")
         print(f"🤖 TDX Agent (Approved): {tdx_agent_address}")
-        print(f"🔗 Direct SDK: → {hyperliquid_exchange.http_client.base_url}")
-        print(f"🔗 Proxy SDK: → {hyperliquid_exchange_via_proxy.http_client.base_url}")
+        print(f"🔗 Direct SDK: → Official Hyperliquid API")
+        print(f"🔗 Proxy SDK: → TDX Server (localhost:8080)")
         
         # Agent should already be approved by the fixture
         print("✅ Agent pre-approved by session fixture")
@@ -246,21 +246,18 @@ class TestEquivalenceTesting:
         
         print(f"💰 Using safe price: ${safe_price:.2f} (market: ${current_btc_price:.2f})")
         
-        # Create identical safe order for both
-        safe_order = {
-            "coin": "BTC",
-            "is_buy": True,
-            "sz": 0.001,  # Very small
-            "limit_px": safe_price,
-            "order_type": {"limit": {"tif": "Gtc"}},
-            "reduce_only": False
-        }
-        
         print("🧪 Testing order equivalence...")
         
         # Test 1: Direct SDK (master wallet signs directly)
         try:
-            direct_result = hyperliquid_exchange.order(safe_order)
+            direct_result = hyperliquid_exchange.order(
+                name="BTC",  # Correct parameter name
+                is_buy=True,
+                sz=0.001,
+                limit_px=safe_price,
+                order_type={"limit": {"tif": "Gtc"}},
+                reduce_only=False
+            )
             print(f"📊 Direct result: {direct_result}")
         except Exception as e:
             print(f"❌ Direct SDK failed: {e}")
@@ -268,7 +265,14 @@ class TestEquivalenceTesting:
         
         # Test 2: Proxy SDK (TDX server agent signs on behalf of master)
         try:
-            proxy_result = hyperliquid_exchange_via_proxy.order(safe_order)
+            proxy_result = hyperliquid_exchange_via_proxy.order(
+                name="BTC",  # Correct parameter name
+                is_buy=True,
+                sz=0.001,
+                limit_px=safe_price,
+                order_type={"limit": {"tif": "Gtc"}},
+                reduce_only=False
+            )
             print(f"📊 Proxy result: {proxy_result}")
         except Exception as e:
             print(f"❌ Proxy SDK failed: {e}")
