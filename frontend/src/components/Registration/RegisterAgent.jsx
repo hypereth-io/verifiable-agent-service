@@ -69,11 +69,11 @@ const RegisterAgent = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-4">
       {/* Welcome Section */}
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold font-hyperwave">TEE-Secured Agent Wallet</h1>
-        <p className="text-xl text-text-secondary font-light max-w-lg mx-auto">
+      <div className="text-center space-y-3">
+        <h1 className="text-3xl font-bold font-hyperwave">TEE-Secured Agent Wallet</h1>
+        <p className="text-lg text-text-secondary font-light max-w-lg mx-auto">
           Register your agent wallet in a Trusted Execution Environment. Your private keys never leave the secure enclave.
         </p>
       </div>

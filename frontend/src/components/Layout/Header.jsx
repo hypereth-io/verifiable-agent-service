@@ -20,25 +20,46 @@ const Header = () => {
       {/* Left side - Logo and Navigation */}
       <div className="flex items-center gap-8" data-node-id="509:6833">
         {/* Logo */}
-        <div className="h-6 w-[122.853px]" data-node-id="678:10604">
+        <a 
+          href="https://hypereth.io" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="h-6 w-[122.853px]" 
+          data-node-id="678:10604"
+        >
           <img 
             src={HyperETHLogo} 
             alt="HyperETH" 
-            className="block max-w-none size-full" 
+            className="block max-w-none size-full hover:opacity-80 transition-opacity" 
           />
-        </div>
+        </a>
         
         {/* Navigation */}
         <nav className="flex items-center gap-9 text-base leading-[0]" data-node-id="509:6835">
-          <span className="font-work font-light text-text-secondary cursor-pointer hover:text-text-primary transition-colors">
+          <a 
+            href="https://hypereth.io/perps" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="font-work font-light text-text-secondary hover:text-text-primary transition-colors"
+          >
             Perps
-          </span>
-          <span className="font-work font-light text-text-secondary cursor-pointer hover:text-text-primary transition-colors">
+          </a>
+          <a 
+            href="https://hypereth.io/spot" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="font-work font-light text-text-secondary hover:text-text-primary transition-colors"
+          >
             Spot  
-          </span>
-          <span className="font-work font-light text-text-secondary cursor-pointer hover:text-text-primary transition-colors">
+          </a>
+          <a 
+            href="https://hypereth.io/rewards" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="font-work font-light text-text-secondary hover:text-text-primary transition-colors"
+          >
             Rewards
-          </span>
+          </a>
           <span className="font-work font-normal text-white">
             Agent
           </span>
@@ -52,8 +73,8 @@ const Header = () => {
           onClick={() => setDemoMode(!isDemoMode)}
           className={`px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${
             isDemoMode 
-              ? 'bg-accent text-white' 
-              : 'bg-border-primary text-text-secondary border border-border-secondary hover:bg-border-secondary'
+              ? 'bg-white text-background' 
+              : 'bg-border-primary text-text-secondary border border-border-secondary hover:bg-border-secondary hover:text-text-primary'
           }`}
         >
           {isDemoMode ? 'Demo Mode' : 'Live Mode'}
@@ -134,26 +155,6 @@ const Header = () => {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="bg-border-primary border-[0.75px] border-border-primary rounded-xl p-2 h-9 flex items-center justify-center" data-node-id="520:6516">
-          <div className="w-5 h-5" data-node-id="520:6517">
-            <img 
-              src={BookmarkIcon} 
-              alt="Bookmark" 
-              className="block max-w-none size-full" 
-            />
-          </div>
-        </div>
-
-        <div className="bg-border-primary border-[0.75px] border-border-primary rounded-xl p-2 h-9 flex items-center justify-center" data-node-id="520:6519">
-          <div className="w-5 h-5" data-node-id="520:6520">
-            <img 
-              src={SettingsIcon} 
-              alt="Settings" 
-              className="block max-w-none size-full" 
-            />
-          </div>
-        </div>
       </div>
     </div>
   )

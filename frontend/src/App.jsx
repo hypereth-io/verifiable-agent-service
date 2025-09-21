@@ -25,7 +25,7 @@ function App() {
 
   // Welcome screen
   const WelcomeScreen = () => (
-    <div className="max-w-4xl mx-auto text-center space-y-8">
+    <div className="max-w-4xl mx-auto text-center space-y-6">
       <div className="space-y-4">
         <h1 className="text-6xl font-bold font-hyperwave bg-gradient-to-r from-white to-text-secondary bg-clip-text text-transparent">
           HyperETH
@@ -40,8 +40,8 @@ function App() {
       </div>
 
       {/* Feature highlights */}
-      <div className="grid md:grid-cols-3 gap-6 mt-12">
-        <div className="p-6 glass-card">
+      <div className="grid md:grid-cols-3 gap-4 mt-8">
+        <div className="p-4 glass-card">
           <div className="w-12 h-12 bg-accent rounded-xl mb-4 mx-auto flex items-center justify-center">
             <ShieldIcon className="w-6 h-6 text-white" />
           </div>
@@ -51,7 +51,7 @@ function App() {
           </p>
         </div>
         
-        <div className="p-6 glass-card">
+        <div className="p-4 glass-card">
           <div className="w-12 h-12 bg-accent rounded-xl mb-4 mx-auto flex items-center justify-center">
             <CheckIcon className="w-6 h-6 text-white" />
           </div>
@@ -61,7 +61,7 @@ function App() {
           </p>
         </div>
         
-        <div className="p-6 glass-card">
+        <div className="p-4 glass-card">
           <div className="w-12 h-12 bg-accent rounded-xl mb-4 mx-auto flex items-center justify-center">
             <KeyIcon className="w-6 h-6 text-white" />
           </div>
@@ -73,7 +73,7 @@ function App() {
       </div>
 
       {/* Demo flow steps */}
-      <div className="mt-12 p-6 glass-card text-left max-w-2xl mx-auto">
+      <div className="mt-8 p-4 glass-card text-left max-w-2xl mx-auto">
         <h3 className="font-semibold mb-4 text-center">Demo Flow</h3>
         <div className="space-y-3">
           <div className="flex items-center gap-3">
@@ -96,7 +96,7 @@ function App() {
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-4 justify-center mt-8">
+      <div className="flex gap-4 justify-center mt-6">
         <Button
           onClick={() => setCurrentStep('register')}
           size="lg"
@@ -169,7 +169,7 @@ function App() {
     const currentIndex = steps.findIndex(step => step.key === currentStep)
 
     return (
-      <div className="flex justify-center mb-8">
+      <div className="flex justify-center mb-4">
         <div className="flex items-center gap-2 p-2 glass-card">
           {steps.map((step, index) => (
             <React.Fragment key={step.key}>

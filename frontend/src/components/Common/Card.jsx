@@ -12,11 +12,11 @@ const Card = ({
   return (
     <div className={`glass-card ${className}`}>
       {title && (
-        <div className="flex items-center justify-between p-6 border-b border-border-primary">
+        <div className="flex items-center justify-between p-4 border-b border-border-primary">
           <div>
-            <h3 className="text-xl font-normal text-text-primary">{title}</h3>
+            <h3 className="text-lg font-normal text-text-primary">{title}</h3>
             {subtitle && (
-              <p className="text-base font-light text-text-secondary mt-1">{subtitle}</p>
+              <p className="text-sm font-light text-text-secondary mt-1">{subtitle}</p>
             )}
           </div>
           {headerAction && (
@@ -25,14 +25,14 @@ const Card = ({
         </div>
       )}
       
-      <div className="p-6">
+      <div className="p-4">
         {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="w-8 h-8 spinner"></div>
+          <div className="flex items-center justify-center h-32">
+            <div className="w-6 h-6 spinner"></div>
           </div>
         ) : isEmpty ? (
-          <div className="h-48 border-2 border-dashed border-border-dashed rounded-xl flex items-center justify-center">
-            <p className="text-text-secondary">No data available</p>
+          <div className="h-32 border-2 border-dashed border-border-dashed rounded-xl flex items-center justify-center">
+            <p className="text-text-secondary text-sm">No data available</p>
           </div>
         ) : (
           children

@@ -93,11 +93,11 @@ const VerifyOnChain = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-4">
       {/* Header */}
-      <div className="text-center space-y-4">
-        <h1 className="text-4xl font-bold font-hyperwave">On-Chain Verification</h1>
-        <p className="text-xl text-text-secondary font-light max-w-2xl mx-auto">
+      <div className="text-center space-y-3">
+        <h1 className="text-3xl font-bold font-hyperwave">On-Chain Verification</h1>
+        <p className="text-lg text-text-secondary font-light max-w-2xl mx-auto">
           Register your TEE attestation on the Hyperliquid blockchain to enable verifiable agent trading
         </p>
       </div>

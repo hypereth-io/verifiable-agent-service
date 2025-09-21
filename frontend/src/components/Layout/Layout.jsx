@@ -19,7 +19,7 @@ const Layout = ({ children }) => {
       {/* Main content */}
       <div className="relative z-10">
         <Header />
-        <main className="px-8 py-6">
+        <main className="px-8 py-4">
           {children}
         </main>
       </div>

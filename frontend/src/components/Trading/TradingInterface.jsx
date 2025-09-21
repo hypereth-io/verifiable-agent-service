@@ -135,12 +135,12 @@ const TradingInterface = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold font-hyperwave">Trading Terminal</h1>
-          <p className="text-xl text-text-secondary font-light mt-2">
+          <h1 className="text-3xl font-bold font-hyperwave">Trading Terminal</h1>
+          <p className="text-lg text-text-secondary font-light mt-1">
             Execute trades using your TEE-secured agent wallet
           </p>
         </div>

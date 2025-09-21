@@ -79,12 +79,12 @@ const AgentStatus = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold font-hyperwave">Agent Dashboard</h1>
-          <p className="text-xl text-text-secondary font-light mt-2">
+          <h1 className="text-3xl font-bold font-hyperwave">Agent Dashboard</h1>
+          <p className="text-lg text-text-secondary font-light mt-1">
             Monitor your TEE-secured agent wallet status and activity
           </p>
         </div>
