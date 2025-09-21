@@ -13,13 +13,18 @@ use tower_http::cors::CorsLayer;
 use tracing::{info, warn, error};
 
 mod agent;
+mod agents;
 mod auth;
 mod config;
+mod preset_tdx;
 mod proxy;
 mod signing;
+mod siwe_auth;
 
 use agent::AgentManager;
+use agents::AgentSessionManager;
 use config::Config;
+use preset_tdx::PresetTDXData;
 use proxy::HyperliquidProxy;
 
 #[derive(Clone)]
@@ -27,6 +32,7 @@ pub struct AppState {
     proxy: Arc<HyperliquidProxy>,
     config: Arc<Config>,
     agent_manager: Arc<RwLock<AgentManager>>,
+    session_manager: Arc<RwLock<AgentSessionManager>>,
 }
 
 #[tokio::main]
@@ -42,17 +48,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 Starting TDX Agent Server...");
     info!("Starting TDX Agent Server");
 
+    // Initialize preset TDX data
+    PresetTDXData::initialize()?;
+    info!("✅ Preset TDX data initialized");
+
     // Load configuration
     let config = Arc::new(Config::from_env());
     
     // Initialize components
     let proxy = Arc::new(HyperliquidProxy::new(&config.hyperliquid_url));
     let agent_manager = Arc::new(RwLock::new(AgentManager::new()));
+    let session_manager = Arc::new(RwLock::new(AgentSessionManager::new()));
 
     let state = AppState {
         proxy,
         config,
         agent_manager,
+        session_manager,
     };
 
     // Build router with authentication for /exchange endpoints
@@ -61,6 +73,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/info", post(proxy_info))
         .route("/exchange", post(proxy_exchange))
         .route("/debug/agent-address", get(get_agent_address))
+        // Agents API routes
+        .route("/agents/login", post(agents_login))
+        .route("/agents/quote", get(agents_quote))
+        .route("/debug/sessions", get(debug_sessions))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             |State(state): State<AppState>, req: Request, next: Next| async move {
@@ -124,6 +140,23 @@ async fn proxy_info(
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
+}
+
+async fn agents_login(
+    State(session_manager): State<AppState>,
+    Json(payload): Json<siwe_auth::SiweLoginRequest>,
+) -> Result<Json<siwe_auth::SiweLoginResponse>, (StatusCode, Json<siwe_auth::SiweLoginError>)> {
+    agents::agents_login(State(session_manager.session_manager), Json(payload)).await
+}
+
+async fn agents_quote() -> Result<Json<Value>, StatusCode> {
+    agents::agents_quote().await
+}
+
+async fn debug_sessions(
+    State(session_manager): State<AppState>,
+) -> Json<Value> {
+    agents::debug_sessions(State(session_manager.session_manager)).await
 }
 
 async fn proxy_exchange(
