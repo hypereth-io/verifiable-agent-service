@@ -67,6 +67,17 @@ def hyperliquid_info(config):
         info.disconnect_websocket()
 
 @pytest.fixture(scope="session")
+def hyperliquid_info_via_proxy(config):
+    """Create Hyperliquid Info client configured to use TDX proxy."""
+    # Point SDK to our local proxy server
+    proxy_url = config.tdx_server_url
+    info = Info(base_url=proxy_url, skip_ws=True)
+    yield info
+    # Clean up websocket connections if any
+    if hasattr(info, 'ws_manager') and info.ws_manager:
+        info.disconnect_websocket()
+
+@pytest.fixture(scope="session")
 def hyperliquid_exchange(config, test_account):
     """Create Hyperliquid Exchange client for signing tests."""
     base_url = None if config.use_testnet else "https://api.hyperliquid.xyz"
