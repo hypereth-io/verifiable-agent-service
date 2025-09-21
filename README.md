@@ -97,10 +97,10 @@ curl -X POST http://tdx-server:8080/exchange/order \
 - Built with Foundry for Hyperliquid deployment
 
 ### 🖥️ TEE API Server (`/tdx-server`)
-- **Rust Core**: TEE attestation and key management
-- **Python Proxy**: Hyperliquid API integration
-- **API Key Auth**: Secure access without exposing keys
-- **Auto-signing**: Transparent transaction signing
+- **Pure Rust Implementation**: TEE attestation and key management using Automata TDX SDK
+- **Hyperliquid Integration**: Direct API proxy with automatic signing
+- **API Key Auth**: Secure access without exposing agent keys
+- **Request Routing**: Transparent passthrough for `/info`, interception for `/exchange`
 
 ### 📚 Documentation (`/docs`)
 - Architecture deep-dive
@@ -119,7 +119,7 @@ curl -X POST http://tdx-server:8080/exchange/order \
 ### Prerequisites
 - Intel TDX-enabled hardware (for production)
 - Foundry for smart contract development
-- Rust and Python for server components
+- Rust toolchain (1.70+) for server implementation
 
 ### Quick Setup
 ```bash
@@ -130,9 +130,8 @@ cd agent-wallet
 # Set up contracts
 cd contracts && forge install
 
-# Set up server
-cd ../tdx-server && cargo build
-pip install -r python/requirements.txt
+# Set up Rust server
+cd ../tdx-server && cargo build --release
 ```
 
 ## Development Status

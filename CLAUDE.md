@@ -11,7 +11,7 @@ This is a **hlh.builders hackathon submission** for a TEE-Secured Hyperliquid Ag
 The system consists of three main components:
 
 1. **Smart Contract Registry** (`/contracts`): Foundry-based contracts that verify Intel TDX attestation reports and maintain an on-chain registry of verified agent wallets
-2. **TDX Server** (`/tdx-server`): Hybrid Rust/Python server running in Intel TDX that manages agent keys, generates attestations, and proxies Hyperliquid API requests with automatic signing
+2. **TDX Server** (`/tdx-server`): Pure Rust server running in Intel TDX that manages agent keys using Automata TDX SDK, generates attestations, and proxies Hyperliquid API requests with automatic signing
 3. **User Interface**: API-based interaction where users authenticate with API keys instead of managing private keys directly
 
 ## Key Development Commands
@@ -39,8 +39,8 @@ forge verify-contract --rpc-url hyperliquid_testnet <CONTRACT_ADDRESS> Registry
 
 ### TDX Server Development (`/tdx-server`)
 ```bash
-# Build Rust components
-cargo build
+# Build Rust server
+cargo build --release
 
 # Run main server
 cargo run --bin server
@@ -48,11 +48,12 @@ cargo run --bin server
 # Run attestation setup
 cargo run --bin setup-attestation
 
-# Install Python dependencies
-cd python && pip install -r requirements.txt
-
 # Run tests
 cargo test
+
+# Check formatting and linting
+cargo fmt
+cargo clippy
 ```
 
 ## Network Configuration
@@ -83,9 +84,9 @@ The project is configured for Hyperliquid networks:
 ## Important Notes
 
 - The Registry.sol contract currently contains placeholder TDX verification logic that needs actual Intel TDX attestation libraries
-- The Rust server structure is established but core TEE functionality requires implementation
+- The Rust server structure is established with Automata TDX SDK dependencies configured
 - Foundry configuration includes gas optimization and security settings appropriate for production deployment
-- Python components are structured for Hyperliquid API integration but implementation is pending
+- Server implements pure Rust architecture for better performance and security in TEE environment
 
 ## Development Environment
 
