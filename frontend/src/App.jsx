@@ -25,107 +25,85 @@ function App() {
 
   // Welcome screen
   const WelcomeScreen = () => (
-    <div className="max-w-4xl mx-auto text-center space-y-6">
-      <div className="space-y-4">
-        <h1 className="text-6xl font-bold font-hyperwave bg-gradient-to-r from-white to-text-secondary bg-clip-text text-transparent">
-          HyperETH
+    <div className="max-w-5xl mx-auto text-center space-y-12 py-8">
+      <div className="space-y-6">
+        <h1 className="text-6xl font-bold font-hyperwave bg-gradient-to-r from-white to-text-secondary bg-clip-text text-transparent leading-tight">
+          HyperETH Agent Demo
         </h1>
-        <p className="text-2xl text-text-secondary font-light">
-          TEE-Secured Agent Wallet Demo
-        </p>
-        <p className="text-lg text-text-secondary max-w-2xl mx-auto">
+        <p className="text-xl text-text-secondary font-light max-w-3xl mx-auto leading-relaxed">
           Experience secure Hyperliquid trading with agent wallets hosted in Intel TDX environments. 
           Your private keys never leave the trusted execution environment.
         </p>
       </div>
 
-      {/* Feature highlights */}
-      <div className="grid md:grid-cols-3 gap-4 mt-8">
-        <div className="p-4 glass-card">
-          <div className="w-12 h-12 bg-accent rounded-xl mb-4 mx-auto flex items-center justify-center">
-            <ShieldIcon className="w-6 h-6 text-white" />
+      {/* Feature highlights - balanced spacing */}
+      <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+        <div className="p-6 glass-card text-center">
+          <div className="w-16 h-16 bg-white/10 border border-white/20 rounded-xl mb-4 mx-auto flex items-center justify-center">
+            <ShieldIcon className="w-8 h-8 text-white" />
           </div>
-          <h3 className="font-semibold mb-2">Zero Local Storage</h3>
-          <p className="text-text-secondary text-sm">
+          <h3 className="font-semibold mb-3 text-lg">Zero Local Storage</h3>
+          <p className="text-text-secondary text-sm leading-relaxed">
             Agent keys generated and secured entirely within Intel TDX environment
           </p>
         </div>
         
-        <div className="p-4 glass-card">
-          <div className="w-12 h-12 bg-accent rounded-xl mb-4 mx-auto flex items-center justify-center">
-            <CheckIcon className="w-6 h-6 text-white" />
+        <div className="p-6 glass-card text-center">
+          <div className="w-16 h-16 bg-white/10 border border-white/20 rounded-xl mb-4 mx-auto flex items-center justify-center">
+            <CheckIcon className="w-8 h-8 text-white" />
           </div>
-          <h3 className="font-semibold mb-2">Verifiable Security</h3>
-          <p className="text-text-secondary text-sm">
+          <h3 className="font-semibold mb-3 text-lg">Verifiable Security</h3>
+          <p className="text-text-secondary text-sm leading-relaxed">
             TDX attestation reports verified on-chain for transparent security
           </p>
         </div>
         
-        <div className="p-4 glass-card">
-          <div className="w-12 h-12 bg-accent rounded-xl mb-4 mx-auto flex items-center justify-center">
-            <KeyIcon className="w-6 h-6 text-white" />
+        <div className="p-6 glass-card text-center">
+          <div className="w-16 h-16 bg-white/10 border border-white/20 rounded-xl mb-4 mx-auto flex items-center justify-center">
+            <KeyIcon className="w-8 h-8 text-white" />
           </div>
-          <h3 className="font-semibold mb-2">API Access</h3>
-          <p className="text-text-secondary text-sm">
+          <h3 className="font-semibold mb-3 text-lg">API Access</h3>
+          <p className="text-text-secondary text-sm leading-relaxed">
             Trade using secure API keys without handling private keys
           </p>
         </div>
       </div>
 
-      {/* Demo flow steps */}
-      <div className="mt-8 p-4 glass-card text-left max-w-2xl mx-auto">
-        <h3 className="font-semibold mb-4 text-center">Demo Flow</h3>
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 bg-accent rounded-full text-white text-sm flex items-center justify-center font-medium">1</div>
-            <span>Register agent wallet in TEE environment</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 bg-border-dashed border border-border-dashed rounded-full text-text-secondary text-sm flex items-center justify-center">2</div>
-            <span className="text-text-secondary">Verify TDX attestation on-chain</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 bg-border-dashed border border-border-dashed rounded-full text-text-secondary text-sm flex items-center justify-center">3</div>
-            <span className="text-text-secondary">Monitor agent status and attestation</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 bg-border-dashed border border-border-dashed rounded-full text-text-secondary text-sm flex items-center justify-center">4</div>
-            <span className="text-text-secondary">Execute trades using API key</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Action buttons */}
-      <div className="flex gap-4 justify-center mt-6">
-        <Button
-          onClick={() => setCurrentStep('register')}
-          size="lg"
-        >
-          Start Demo
-        </Button>
-        {agent && (
+      {/* Call to action */}
+      <div className="space-y-6">
+        <div className="flex gap-6 justify-center">
           <Button
-            variant="secondary"
-            onClick={() => setCurrentStep('dashboard')}
+            onClick={() => setCurrentStep('register')}
             size="lg"
+            className="px-8 py-4 text-lg"
           >
-            Continue to Dashboard
+            Start Demo
           </Button>
+          {agent && (
+            <Button
+              variant="secondary"
+              onClick={() => setCurrentStep('dashboard')}
+              size="lg" 
+              className="px-8 py-4 text-lg"
+            >
+              Continue to Dashboard →
+            </Button>
+          )}
+        </div>
+
+        {/* Demo mode indicator */}
+        {isDemoMode && (
+          <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl max-w-lg mx-auto">
+            <div className="flex items-center gap-3 justify-center">
+              <InfoIcon className="w-5 h-5 text-yellow-400" />
+              <span className="text-yellow-400 font-medium">Demo Mode Active</span>
+            </div>
+            <p className="text-yellow-400/80 text-sm mt-2 text-center">
+              All operations will be simulated for demonstration purposes
+            </p>
+          </div>
         )}
       </div>
-
-      {/* Demo mode indicator */}
-      {isDemoMode && (
-        <div className="mt-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl max-w-md mx-auto">
-          <div className="flex items-center gap-2 justify-center">
-            <InfoIcon className="w-5 h-5 text-yellow-400" />
-            <span className="text-yellow-400 font-medium">Demo Mode Active</span>
-          </div>
-          <p className="text-yellow-400/80 text-sm mt-1 text-center">
-            All operations will be simulated for demonstration
-          </p>
-        </div>
-      )}
     </div>
   )
 
@@ -243,9 +221,9 @@ const ShieldIcon = ({ className }) => (
 const CheckIcon = ({ className }) => (
   <svg viewBox="0 0 24 24" className={className}>
     <path
-      d="M9 12l2 2 4-4"
+      d="M6 12l4 4 8-8"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       fill="none"
       strokeLinecap="round"
       strokeLinejoin="round"
