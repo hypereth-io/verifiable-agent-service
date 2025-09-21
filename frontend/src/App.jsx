@@ -156,7 +156,7 @@ function App() {
                 disabled={index > currentIndex + 1}
                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   step.key === currentStep
-                    ? 'bg-accent text-white'
+                    ? 'bg-white text-background'
                     : index <= currentIndex
                     ? 'text-text-primary hover:bg-border-primary'
                     : 'text-text-secondary cursor-not-allowed'

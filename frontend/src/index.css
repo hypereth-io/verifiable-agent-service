@@ -50,5 +50,5 @@ body {
 
 /* Loading spinner */
 .spinner {
-  @apply animate-spin rounded-full border-2 border-border-primary border-t-text-primary;
+  @apply animate-spin rounded-full border-2 border-white/20 border-t-white;
 }

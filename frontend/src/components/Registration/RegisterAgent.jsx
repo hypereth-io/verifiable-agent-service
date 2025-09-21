@@ -84,36 +84,6 @@ const RegisterAgent = () => {
         subtitle="Create a secure agent wallet hosted in Intel TDX"
       >
         <div className="space-y-6">
-          {/* Benefits */}
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-lg bg-border-primary border border-border-secondary">
-              <div className="w-8 h-8 bg-accent rounded-lg mb-3 flex items-center justify-center">
-                <ShieldIcon className="w-5 h-5 text-white" />
-              </div>
-              <h3 className="font-medium mb-2">Zero Local Storage</h3>
-              <p className="text-sm text-text-secondary">
-                Private keys generated and stored only in TEE
-              </p>
-            </div>
-            <div className="p-4 rounded-lg bg-border-primary border border-border-secondary">
-              <div className="w-8 h-8 bg-accent rounded-lg mb-3 flex items-center justify-center">
-                <CheckIcon className="w-5 h-5 text-white" />
-              </div>
-              <h3 className="font-medium mb-2">Verifiable Security</h3>
-              <p className="text-sm text-text-secondary">
-                Intel TDX attestation verified on-chain
-              </p>
-            </div>
-            <div className="p-4 rounded-lg bg-border-primary border border-border-secondary">
-              <div className="w-8 h-8 bg-accent rounded-lg mb-3 flex items-center justify-center">
-                <KeyIcon className="w-5 h-5 text-white" />
-              </div>
-              <h3 className="font-medium mb-2">API Access</h3>
-              <p className="text-sm text-text-secondary">
-                Trade using API keys, not private keys
-              </p>
-            </div>
-          </div>
 
           {/* Registration Form */}
           <div className="space-y-4">
