@@ -41,6 +41,45 @@ class TestInfoEndpointProxy:
         
         print(f"✓ Got {len(sdk_response)} trading pairs from Hyperliquid API")
     
+    @pytest.mark.integration
+    def test_all_mids_proxy(self, tdx_server_client, hyperliquid_info, sample_info_requests):
+        """Test that allMids request works through TDX proxy."""
+        # Get baseline response from SDK
+        try:
+            sdk_response = hyperliquid_info.all_mids()
+        except Exception as e:
+            pytest.skip(f"Cannot get baseline from Hyperliquid SDK: {e}")
+        
+        # Get response from TDX server proxy
+        proxy_response = tdx_server_client.post("/info", sample_info_requests["all_mids"])
+        
+        # Assertions
+        assert proxy_response.status_code == 200, f"Expected 200, got {proxy_response.status_code}"
+        proxy_data = proxy_response.json()
+        
+        # Compare response structure
+        assert isinstance(proxy_data, dict), "Response should be a dictionary"
+        assert len(proxy_data) > 0, "Response should contain mid prices"
+        
+        # Verify that common coins exist in both responses
+        common_coins = ["BTC", "ETH"]
+        for coin in common_coins:
+            if coin in sdk_response:
+                assert coin in proxy_data, f"Coin {coin} missing from proxy response"
+                # Verify price is a valid number string
+                assert isinstance(proxy_data[coin], str), f"Price for {coin} should be string"
+                try:
+                    proxy_price = float(proxy_data[coin])
+                    sdk_price = float(sdk_response[coin])
+                    # Prices should be close (within 5% due to potential timing differences)
+                    price_diff = abs(proxy_price - sdk_price) / sdk_price
+                    assert price_diff < 0.05, f"Proxy price {proxy_price} too different from SDK price {sdk_price}"
+                    print(f"✓ {coin} - SDK: {sdk_response[coin]}, Proxy: {proxy_data[coin]}")
+                except ValueError:
+                    pytest.fail(f"Price for {coin} is not a valid number: {proxy_data[coin]}")
+        
+        print(f"✓ Proxy returned {len(proxy_data)} pairs, SDK returned {len(sdk_response)} pairs")
+    
     @pytest.mark.integration 
     def test_l2_book_direct_api(self, hyperliquid_info):
         """Test that we can get l2Book from Hyperliquid API directly."""

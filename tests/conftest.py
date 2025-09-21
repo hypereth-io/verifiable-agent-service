@@ -59,7 +59,12 @@ def test_account(config):
 def hyperliquid_info(config):
     """Create Hyperliquid Info client for baseline comparisons."""
     base_url = None if config.use_testnet else "https://api.hyperliquid.xyz"
-    return Info(base_url=base_url)
+    # Disable websockets to prevent hanging
+    info = Info(base_url=base_url, skip_ws=True)
+    yield info
+    # Clean up websocket connections if any
+    if hasattr(info, 'ws_manager') and info.ws_manager:
+        info.disconnect_websocket()
 
 @pytest.fixture(scope="session")
 def hyperliquid_exchange(config, test_account):
@@ -111,7 +116,7 @@ def tdx_server_client(config):
                 return response.status_code == 200
             except:
                 return False
-    
+        
     return TDXServerClient(
         base_url=config.tdx_server_url,
         api_key=config.test_api_key,
