@@ -4,7 +4,8 @@
       "Bash(source:*)",
       "Bash(pytest:*)",
       "Bash(cargo build:*)",
-      "Bash(cargo run:*)"
+      "Bash(cargo run:*)",
+      "mcp__figma-dev-mode-mcp-server__get_code"
     ],
     "deny": [],
     "ask": []
