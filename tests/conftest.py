@@ -20,7 +20,7 @@ class Config:
     
     def __init__(self):
         self.tdx_server_url = os.getenv("TDX_SERVER_URL", "http://localhost:8080")
-        self.test_api_key = os.getenv("TEST_API_KEY", "test-api-key-12345")
+        self.test_api_key = os.getenv("TEST_API_KEY", "test-key")
         self.test_private_key = os.getenv("TEST_PRIVATE_KEY")
         self.test_address = os.getenv("TEST_ADDRESS")
         self.test_user_id = os.getenv("TEST_USER_ID", "test-user-001")
