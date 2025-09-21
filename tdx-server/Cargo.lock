@@ -4324,6 +4324,7 @@ dependencies = [
  "base64 0.22.1",
  "config",
  "dotenvy",
+ "ethers",
  "hex",
  "hyper 1.7.0",
  "hyperliquid_rust_sdk",

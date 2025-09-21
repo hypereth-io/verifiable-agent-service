@@ -42,8 +42,16 @@ def config():
 @pytest.fixture(scope="session")
 def test_account(config):
     """Create a test Ethereum account."""
-    if config.test_private_key:
-        # Use provided test key
+    # Check for real private key in environment first
+    real_private_key = os.getenv("PRIVATE_KEY")
+    
+    if real_private_key:
+        # Use real private key from .env
+        key_hex = real_private_key.strip().removeprefix("0x")
+        account = eth_account.Account.from_key(f"0x{key_hex}")
+        print(f"Using real account: {account.address}")
+    elif config.test_private_key:
+        # Use configured test key
         account = eth_account.Account.from_key(config.test_private_key)
     else:
         # Generate a new test account
@@ -83,6 +91,14 @@ def hyperliquid_exchange(config, test_account):
     base_url = None if config.use_testnet else "https://api.hyperliquid.xyz"
     account = test_account["account"]
     return Exchange(account, base_url=base_url)
+
+@pytest.fixture(scope="session")
+def hyperliquid_exchange_via_proxy(config, test_account):
+    """Create Hyperliquid Exchange client configured to use TDX proxy."""
+    # Point SDK to our local proxy server
+    proxy_url = config.tdx_server_url
+    account = test_account["account"]
+    return Exchange(account, base_url=proxy_url)
 
 @pytest.fixture
 def tdx_server_client(config):

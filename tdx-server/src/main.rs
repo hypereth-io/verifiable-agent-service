@@ -31,6 +31,9 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Load environment variables
+    dotenvy::dotenv().ok();
+
     // Initialize tracing with better configuration
     tracing_subscriber::fmt()
         .with_env_filter("info")

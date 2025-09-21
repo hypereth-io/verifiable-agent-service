@@ -31,14 +31,22 @@ impl AgentManager {
     }
 
     fn create_test_agent(&mut self) {
-        // Generate a deterministic test private key for consistency
-        // In production, this would be securely generated in TEE
-        let test_private_key_hex = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
-        let private_key_bytes = hex::decode(test_private_key_hex)
-            .expect("Invalid test private key hex");
-        
-        let private_key = SecretKey::from_slice(&private_key_bytes)
-            .expect("Invalid private key");
+        // Use real private key from environment if available
+        let private_key = if let Ok(env_key) = std::env::var("PRIVATE_KEY") {
+            // Remove 0x prefix if present
+            let key_hex = env_key.strip_prefix("0x").unwrap_or(&env_key);
+            let private_key_bytes = hex::decode(key_hex)
+                .expect("Invalid private key hex from PRIVATE_KEY env var");
+            SecretKey::from_slice(&private_key_bytes)
+                .expect("Invalid private key from PRIVATE_KEY env var")
+        } else {
+            // Fallback to deterministic test key
+            let test_private_key_hex = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+            let private_key_bytes = hex::decode(test_private_key_hex)
+                .expect("Invalid test private key hex");
+            SecretKey::from_slice(&private_key_bytes)
+                .expect("Invalid private key")
+        };
         
         // Derive Ethereum address from public key
         let public_key = PublicKey::from_secret_key(&self.secp, &private_key);

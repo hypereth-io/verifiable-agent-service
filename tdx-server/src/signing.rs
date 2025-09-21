@@ -1,12 +1,16 @@
 use serde_json::Value;
 use secp256k1::SecretKey;
 use tracing::{info, error};
+use ethers::{
+    signers::{LocalWallet, Signer},
+    types::Signature,
+};
 
 #[derive(Debug)]
 pub struct ExchangeSignature {
     pub r: String,
     pub s: String, 
-    pub v: u32,
+    pub v: u64,
 }
 
 impl ExchangeSignature {
@@ -16,6 +20,14 @@ impl ExchangeSignature {
             "s": self.s,
             "v": self.v
         })
+    }
+    
+    pub fn from_ethers_signature(sig: Signature) -> Self {
+        Self {
+            r: format!("0x{:064x}", sig.r),
+            s: format!("0x{:064x}", sig.s),
+            v: sig.v,
+        }
     }
 }
 
@@ -27,27 +39,30 @@ pub fn sign_exchange_request(
 ) -> Result<ExchangeSignature, Box<dyn std::error::Error + Send + Sync>> {
     info!("Signing exchange request with nonce: {}", nonce);
     
-    // TODO: Use hyperliquid_rust_sdk for proper signing
-    // For now, create a placeholder implementation
+    // Convert secp256k1::SecretKey to ethers::LocalWallet
+    let private_key_bytes = private_key.secret_bytes();
+    let wallet = LocalWallet::from_bytes(&private_key_bytes)?;
     
-    // This is a simplified version - we need to use the actual Hyperliquid signing scheme
-    // which involves specific message formatting and EIP-712 style signing
+    info!("Wallet address: {:?}", wallet.address());
     
-    // Placeholder signature (will be replaced with actual implementation)
-    let signature = ExchangeSignature {
-        r: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string(),
-        s: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321".to_string(),
-        v: 27,
-    };
+    // For now, let's implement a simplified version using ethers directly
+    // We'll create a message hash similar to how Hyperliquid does it
     
-    info!("Generated signature: r={}, s={}, v={}", signature.r, signature.s, signature.v);
+    // Create a deterministic message from action + nonce for signing
+    let message = format!("{}:{}", serde_json::to_string(action)?, nonce);
+    let message_hash = ethers::utils::keccak256(message.as_bytes());
     
-    Ok(signature)
+    // Sign the hash
+    let signature = wallet.sign_hash(message_hash.into())?;
+    
+    let result = ExchangeSignature::from_ethers_signature(signature);
+    
+    info!("Generated real signature: r={}, s={}, v={}", result.r, result.s, result.v);
+    
+    Ok(result)
 }
 
-// TODO: Implement actual Hyperliquid signing using hyperliquid_rust_sdk
-// TODO: Handle different action types (order, cancel, transfer, etc.)
-// TODO: Implement proper message formatting and serialization
-// TODO: Add EIP-712 style signing for Hyperliquid compatibility
-// TODO: Handle vault_address for subaccount operations
-// TODO: Add comprehensive error handling for invalid actions
+// TODO: Replace with proper Hyperliquid signing scheme
+// TODO: Use correct message format and EIP-712 domain
+// TODO: Handle vault_address correctly
+// TODO: Implement proper Actions parsing from the SDK

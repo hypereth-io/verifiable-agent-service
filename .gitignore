@@ -25,10 +25,14 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Environment
+# Environment and private keys
 .env
 .env.local
 .env.*.local
+tests/.env
+*.key
+*_private_key*
+secrets/
 
 # Logs
 *.log
