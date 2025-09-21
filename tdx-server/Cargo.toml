@@ -1,0 +1,60 @@
+[package]
+name = "tdx-agent-server"
+version = "0.1.0"
+edition = "2021"
+description = "TEE-secured Hyperliquid agent wallet server running in Intel TDX"
+license = "MIT"
+
+[dependencies]
+# Web framework
+tokio = { version = "1.0", features = ["full"] }
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+hyper = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Cryptography
+secp256k1 = { version = "0.29", features = ["recovery", "global-context", "rand-std"] }
+rand = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# Environment and configuration
+dotenvy = "0.15"
+config = "0.14"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Intel TDX attestation
+dcap-qvl = { git = "https://github.com/automata-network/tdx-attestation-sdk", branch = "main" }
+tdx-attest = { git = "https://github.com/automata-network/tdx-attestation-sdk", branch = "main" }
+base64 = "0.22"
+uuid = { version = "1.0", features = ["v4"] }
+
+# Database (optional - for persistent state)
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite"], optional = true }
+
+[features]
+default = []
+database = ["sqlx"]
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
+[[bin]]
+name = "setup-attestation"
+path = "src/bin/setup.rs"

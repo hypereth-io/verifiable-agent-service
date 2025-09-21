@@ -1,0 +1,31 @@
+# Foundry
+contracts/lib/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# Rust
+tdx-server/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/

@@ -1,0 +1,1137 @@
+openapi: 3.0.3
+info:
+  title: HyperETH Agent Wallet API
+  description: |
+    API for interacting with Hyperliquid exchange via managed agent wallet running in TEE
+
+    **Authentication:**
+    All exchange operations require cryptographic signatures. Use official SDKs when possible
+    to avoid common signing pitfalls.
+
+    **Documentation Sources:**
+    - Hyperliquid official docs: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api
+
+  version: "0.1.0"
+  contact:
+    name: HyperETH
+    url: https://hypereth.io
+  license:
+    name: MIT
+servers:
+  - url: TBD
+    description: HyperETH Agent Wallet API
+
+components:
+  securitySchemes:
+    HyperliquidSignature:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        Hyperliquid uses a custom signing scheme for authentication.
+
+        **Required for:** All `/exchange` endpoints
+        **Format:** Signature generated using private key + nonce + action data
+        **Headers:**
+        - Authorization: Signature
+        - Content-Type: application/json
+
+        **Important Notes:**
+        - Use official SDKs to avoid signing errors
+        - Nonce must be current timestamp in milliseconds
+        - Address fields must be lowercase
+        - Order of fields in msgpack serialization matters
+
+        **Common Pitfalls:**
+        - Not understanding the two signing schemes
+        - Trailing zeros on numbers
+        - Case sensitivity on addresses
+        - Incorrect field ordering
+
+  schemas:
+    # Base request/response types
+    InfoRequest:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          description: The specific info endpoint method to call
+          example: "allMids"
+        user:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{40}$"
+          description: |
+            Ethereum address in 42-character hexadecimal format (0x + 40 hex chars).
+            Required for user-specific endpoints. Must be lowercase when signing.
+          example: "0x31ca8395cf837de08b24da3f660e77761dfb974b"
+        dex:
+          type: string
+          description: |
+            Perp dex name for multi-dex support.
+            Defaults to empty string (first perp dex).
+            Spot mids only included with first perp dex.
+          default: ""
+
+    ExchangeRequest:
+      type: object
+      required:
+        - action
+        - nonce
+      properties:
+        action:
+          type: object
+          description: |
+            The specific exchange action to perform (order, cancel, transfer, etc.).
+            Structure varies by action type.
+        nonce:
+          type: integer
+          format: int64
+          description: |
+            Current timestamp in milliseconds. Must be recent (within ~1 minute).
+            Used to prevent replay attacks.
+          example: 1681923833000
+        signature:
+          type: object
+          description: |
+            Cryptographic signature of the action + nonce in ECDSA format.
+            Generated using private key. Use official SDKs for correct implementation.
+          properties:
+            r:
+              type: string
+              pattern: "^0x[a-fA-F0-9]{64}$"
+              description: R component of the ECDSA signature (32 bytes hex)
+            s:
+              type: string
+              pattern: "^0x[a-fA-F0-9]{64}$"
+              description: S component of the ECDSA signature (32 bytes hex)
+            v:
+              type: integer
+              description: V component of the ECDSA signature (recovery id, typically 27 or 28)
+              minimum: 27
+              maximum: 28
+          required:
+            - r
+            - s
+            - v
+        vaultAddress:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{40}$"
+          description: |
+            Optional vault address for subaccount operations.
+            Must be lowercase when signing.
+
+    # Market data types
+    AllMidsResponse:
+      type: object
+      description: |
+        Mid prices for all available coins. Uses order book mid-point when available,
+        falls back to last trade price. Useful for portfolio valuation and price discovery.
+      additionalProperties:
+        type: string
+        description: |
+          Mid price as string to preserve precision.
+          Key can be coin symbol (e.g., "BTC") or internal index (e.g., "@142").
+      example:
+        BTC: "43250.5"
+        ETH: "2650.25"
+        HYPE: "40.7915"
+        "@142": "116849.5"
+
+    OpenOrder:
+      type: object
+      description: |
+        Represents an active order in the exchange. Orders can be limit or trigger orders
+        with various time-in-force and execution options.
+      required:
+        - coin
+        - side
+        - limitPx
+        - sz
+        - oid
+        - timestamp
+      properties:
+        coin:
+          type: string
+          description: |
+            Trading pair symbol (e.g., "BTC", "ETH").
+            For spot pairs, includes token symbols.
+          example: "BTC"
+        side:
+          type: string
+          enum: ["A", "B"]
+          description: |
+            Order side indicator:
+            - "A" = Ask (sell order)
+            - "B" = Bid (buy order)
+        limitPx:
+          type: string
+          description: |
+            Limit price for the order. String format preserves precision.
+            For market orders, this may be the worst acceptable price.
+          example: "43250.0"
+        sz:
+          type: string
+          description: |
+            Remaining unfilled size of the order. Decreases as order is filled.
+            String format preserves precision for fractional amounts.
+          example: "0.5"
+        oid:
+          type: integer
+          format: int64
+          description: |
+            Unique order identifier assigned by the exchange.
+            Used for order status checks, modifications, and cancellations.
+          example: 127244980388
+        timestamp:
+          type: integer
+          format: int64
+          description: |
+            Order creation timestamp in milliseconds since Unix epoch.
+            Used for order aging and time-in-force calculations.
+          example: 1681923833000
+        cloid:
+          type: string
+          description: |
+            Optional client order ID provided by user for order tracking.
+            Can be used instead of oid for order operations.
+          example: "my_order_001"
+
+    Fill:
+      type: object
+      description: |
+        Represents a trade execution (fill) for a user's order.
+        Contains details about price, size, fees, and market impact.
+      required:
+        - coin
+        - px
+        - sz
+        - side
+        - time
+        - oid
+      properties:
+        coin:
+          type: string
+          description: Trading pair that was executed
+          example: "BTC"
+        px:
+          type: string
+          description: |
+            Execution price of the fill. String format preserves precision.
+            This is the actual price at which the trade occurred.
+          example: "43251.5"
+        sz:
+          type: string
+          description: |
+            Size of the fill (amount traded). String format preserves precision.
+            Multiple fills can occur for a single order.
+          example: "0.25"
+        side:
+          type: string
+          enum: ["A", "B"]
+          description: |
+            Side of the fill:
+            - "A" = Ask (sell)
+            - "B" = Bid (buy)
+        time:
+          type: integer
+          format: int64
+          description: Execution timestamp in milliseconds
+          example: 1681923845000
+        oid:
+          type: integer
+          format: int64
+          description: Order ID that generated this fill
+          example: 127244980388
+        crossed:
+          type: boolean
+          description: |
+            Indicates if the fill crossed the spread (took liquidity).
+            true = market taker, false = market maker
+        fee:
+          type: string
+          description: |
+            Trading fee paid for this fill. Negative values indicate rebates.
+            String format preserves precision.
+          example: "0.0001"
+        hash:
+          type: string
+          description: Transaction hash on the blockchain
+          example: "0x1234567890abcdef..."
+
+    OrderBookLevel:
+      type: object
+      description: |
+        Represents a price level in the order book with aggregated size.
+        Used in L2 order book snapshots.
+      required:
+        - px
+        - sz
+      properties:
+        px:
+          type: string
+          description: |
+            Price level. String format preserves precision.
+            Sorted by price (ascending for bids, descending for asks).
+          example: "43250.5"
+        sz:
+          type: string
+          description: |
+            Total size available at this price level.
+            Aggregated from all orders at this price.
+          example: "2.5"
+        n:
+          type: integer
+          description: |
+            Number of individual orders at this price level.
+            Higher numbers indicate more fragmented liquidity.
+          example: 3
+
+    L2BookResponse:
+      type: object
+      description: |
+        Level 2 order book snapshot showing aggregated liquidity at each price level.
+        Essential for market making and understanding available liquidity.
+      required:
+        - levels
+        - time
+      properties:
+        levels:
+          type: array
+          description: |
+            Array of [bids, asks] where each side contains price levels.
+            Bids sorted highest to lowest, asks sorted lowest to highest.
+          items:
+            type: array
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/OrderBookLevel'
+          example:
+            - [{"px": "43251", "sz": "1.5"}, {"px": "43250", "sz": "2.0"}]  # Bids
+            - [{"px": "43252", "sz": "1.0"}, {"px": "43253", "sz": "0.5"}]  # Asks
+        time:
+          type: integer
+          format: int64
+          description: Snapshot timestamp in milliseconds
+          example: 1681923833000
+
+    CandleData:
+      type: object
+      description: |
+        OHLCV candle data for charting and technical analysis.
+        Provides price action summary for specified time intervals.
+      required:
+        - T
+        - o
+        - h
+        - l
+        - c
+        - v
+      properties:
+        T:
+          type: integer
+          format: int64
+          description: |
+            Candle start time timestamp in milliseconds.
+            Represents the beginning of the time interval.
+          example: 1681923600000
+        o:
+          type: string
+          description: Opening price for the time period
+          example: "43200.0"
+        h:
+          type: string
+          description: Highest price during the time period
+          example: "43350.5"
+        l:
+          type: string
+          description: Lowest price during the time period
+          example: "43150.0"
+        c:
+          type: string
+          description: Closing price for the time period
+          example: "43250.0"
+        v:
+          type: string
+          description: |
+            Volume traded during the time period.
+            Represents the total amount of the base asset traded.
+          example: "125.75"
+        n:
+          type: integer
+          description: Number of trades during the time period
+          example: 47
+
+    FundingRate:
+      type: object
+      description: |
+        Funding rate payment details for perpetual positions.
+        Funding rates help keep perpetual prices close to spot prices.
+      required:
+        - coin
+        - fundingRate
+        - time
+      properties:
+        coin:
+          type: string
+          description: Perpetual contract symbol
+          example: "BTC"
+        fundingRate:
+          type: string
+          description: |
+            Applied funding rate (typically every 8 hours).
+            Positive = longs pay shorts, Negative = shorts pay longs.
+            String format preserves precision.
+          example: "0.0001"
+        usdc:
+          type: string
+          description: |
+            Funding amount paid/received in USDC.
+            Negative = user paid, Positive = user received.
+          example: "-2.5"
+        szi:
+          type: string
+          description: |
+            Position size at the time of funding.
+            Used to calculate the funding payment.
+          example: "0.5"
+        time:
+          type: integer
+          format: int64
+          description: Funding timestamp in milliseconds
+          example: 1681923833000
+
+    MarginSummary:
+      type: object
+      description: |
+        Account margin and risk metrics summary.
+        Critical for understanding account health and available leverage.
+      properties:
+        accountValue:
+          type: string
+          description: |
+            Total account value in USDC including unrealized PnL.
+            This is the net worth of the account.
+          example: "10250.75"
+        totalNtlPos:
+          type: string
+          description: |
+            Total notional position value across all markets.
+            Used for calculating leverage and risk metrics.
+          example: "25000.0"
+        totalRawUsd:
+          type: string
+          description: |
+            Raw USD value without unrealized PnL adjustments.
+            Represents the base value of holdings.
+          example: "10000.0"
+        totalMarginUsed:
+          type: string
+          description: |
+            Total margin currently used for positions.
+            Determines available buying power.
+          example: "1500.0"
+        maintenanceMargin:
+          type: string
+          description: |
+            Minimum margin required to avoid liquidation.
+            Critical threshold for risk management.
+          example: "800.0"
+        withdrawable:
+          type: string
+          description: |
+            Amount available for withdrawal.
+            Free collateral not required for positions.
+          example: "8750.75"
+
+    Position:
+      type: object
+      description: |
+        Individual position information for a trading pair.
+        Contains size, entry price, and unrealized PnL.
+      properties:
+        coin:
+          type: string
+          description: Trading pair symbol
+          example: "BTC"
+        szi:
+          type: string
+          description: |
+            Position size. Positive = long, Negative = short.
+            Zero indicates no position in this market.
+          example: "0.5"
+        entryPx:
+          type: string
+          description: |
+            Average entry price for the position.
+            Used for PnL calculations.
+          example: "43000.0"
+        positionValue:
+          type: string
+          description: |
+            Current notional value of the position.
+            Market price × position size.
+          example: "21625.0"
+        returnOnEquity:
+          type: string
+          description: |
+            Return on equity as a percentage.
+            Measures performance relative to margin used.
+          example: "5.25"
+        unrealizedPnl:
+          type: string
+          description: |
+            Unrealized profit/loss in USDC.
+            Mark price vs entry price difference.
+          example: "125.0"
+        leverage:
+          type: string
+          description: |
+            Current leverage for this position.
+            Position value ÷ margin used.
+          example: "2.5"
+
+    OrderStatus:
+      type: object
+      description: |
+        Detailed status information for a specific order.
+        Tracks the complete lifecycle of an order.
+      properties:
+        status:
+          type: string
+          description: Type of response (typically "order")
+        order:
+          type: object
+          properties:
+            order:
+              type: object
+              description: Detailed order information
+            status:
+              type: string
+              enum:
+                - "open"
+                - "filled"
+                - "canceled"
+                - "triggered"
+                - "rejected"
+                - "marginCanceled"
+                - "tickRejected"
+              description: |
+                Current order status:
+                - "open": Active and waiting for fills
+                - "filled": Completely executed
+                - "canceled": User-canceled
+                - "triggered": Trigger order activated
+                - "rejected": Order rejected by exchange
+                - "marginCanceled": Canceled due to insufficient margin
+                - "tickRejected": Rejected due to tick size violation
+            statusTimestamp:
+              type: integer
+              format: int64
+              description: |
+                Timestamp when the status was last updated.
+                Used for tracking order lifecycle timing.
+              example: 1681923833000
+
+    # Exchange operation types
+    PlaceOrderAction:
+      type: object
+      description: |
+        Place a new order on the exchange. Supports limit, market, and trigger orders
+        with various execution options and risk management features.
+      required:
+        - type
+        - orders
+      properties:
+        type:
+          type: string
+          enum: ["order"]
+          description: Action type identifier for order placement
+        orders:
+          type: array
+          description: |
+            Array of orders to place. Supports batch order placement
+            for improved efficiency and atomic execution.
+          items:
+            type: object
+            required:
+              - a
+              - b
+              - p
+              - s
+              - r
+            properties:
+              a:
+                type: integer
+                description: |
+                  Asset index for the trading pair.
+                  Maps to specific perpetual or spot markets.
+                example: 0
+              b:
+                type: boolean
+                description: |
+                  Order side: true = buy (bid), false = sell (ask).
+                  Determines the direction of the trade.
+              p:
+                type: string
+                description: |
+                  Limit price for the order. String format preserves precision.
+                  For market orders, represents the worst acceptable price.
+                example: "43250.0"
+              s:
+                type: string
+                description: |
+                  Order size (amount to buy/sell). String format preserves precision.
+                  Must be greater than minimum order size for the market.
+                example: "0.1"
+              r:
+                type: boolean
+                description: |
+                  Reduce-only flag. If true, order can only reduce existing position.
+                  Prevents position size from increasing beyond current level.
+              t:
+                type: object
+                description: |
+                  Order type specification (limit, trigger, market).
+                  Defines the execution behavior and conditions.
+                properties:
+                  limit:
+                    type: object
+                    description: Standard limit order execution
+                    properties:
+                      tif:
+                        type: string
+                        enum: ["Alo", "Ioc", "Gtc"]
+                        description: |
+                          Time in force:
+                          - "Alo": Add Liquidity Only (post-only)
+                          - "Ioc": Immediate or Cancel
+                          - "Gtc": Good Till Cancel
+                  trigger:
+                    type: object
+                    description: |
+                      Trigger order that activates when price condition is met.
+                      Used for stop-loss and take-profit strategies.
+                    properties:
+                      triggerPx:
+                        type: string
+                        description: Price level that triggers order activation
+                      isMarket:
+                        type: boolean
+                        description: |
+                          Execute as market order when triggered.
+                          If false, executes as limit order.
+                      tpsl:
+                        type: string
+                        enum: ["tp", "sl"]
+                        description: |
+                          Trigger type:
+                          - "tp": Take Profit (triggered when price rises above)
+                          - "sl": Stop Loss (triggered when price falls below)
+              cloid:
+                type: string
+                description: |
+                  Client order ID for tracking. Must be unique per user.
+                  Useful for reconciling orders with internal systems.
+                example: "my_order_001"
+
+    CancelOrderAction:
+      type: object
+      description: |
+        Cancel existing orders by order ID or client order ID.
+        Supports both individual and batch cancellations.
+      required:
+        - type
+        - cancels
+      properties:
+        type:
+          type: string
+          enum: ["cancel"]
+        cancels:
+          type: array
+          description: Array of order cancellation requests
+          items:
+            type: object
+            properties:
+              a:
+                type: integer
+                description: Asset index for the market
+                example: 0
+              o:
+                type: integer
+                format: int64
+                description: |
+                  Order ID to cancel. Either this or cloid must be provided.
+                  Use the oid returned from order placement.
+                example: 127244980388
+              cloid:
+                type: string
+                description: |
+                  Client order ID to cancel. Alternative to order ID.
+                  Useful when tracking orders by custom identifiers.
+                example: "my_order_001"
+
+    ModifyOrderAction:
+      type: object
+      description: |
+        Modify existing order price, size, or other parameters.
+        More efficient than cancel + replace for order updates.
+      required:
+        - type
+        - oid
+      properties:
+        type:
+          type: string
+          enum: ["modify"]
+        oid:
+          type: integer
+          format: int64
+          description: Order ID to modify
+          example: 127244980388
+        order:
+          $ref: '#/components/schemas/PlaceOrderAction/properties/orders/items'
+          description: New order parameters to apply
+
+    UsdcTransferAction:
+      type: object
+      description: |
+        Transfer USDC between accounts or to external addresses.
+        Used for account funding and withdrawal operations.
+      required:
+        - type
+        - hyperliquidChain
+        - signatureChainId
+        - destination
+        - amount
+        - time
+      properties:
+        type:
+          type: string
+          enum: ["usdTransfer"]
+        hyperliquidChain:
+          type: string
+          description: |
+            Target chain identifier. Use "Mainnet" for production.
+            Determines which Hyperliquid network to use.
+          example: "Mainnet"
+        signatureChainId:
+          type: string
+          description: |
+            Chain ID for signature validation. Must match network.
+            Used to prevent cross-chain replay attacks.
+          example: "0xa4b1"
+        destination:
+          type: string
+          pattern: "^0x[a-fA-F0-9]{40}$"
+          description: |
+            Destination Ethereum address for the transfer.
+            Must be a valid 42-character hexadecimal address.
+          example: "0x1234567890123456789012345678901234567890"
+        amount:
+          type: string
+          description: |
+            Transfer amount in USDC. String format preserves precision.
+            Must not exceed available balance.
+          example: "100.0"
+        time:
+          type: integer
+          format: int64
+          description: |
+            Transfer timestamp in milliseconds. Must be recent.
+            Used for transfer ordering and validation.
+          example: 1681923833000
+
+    # Error responses
+    ErrorResponse:
+      type: object
+      description: |
+        Standard error response format for failed requests.
+        Provides details about what went wrong and potential solutions.
+      properties:
+        error:
+          type: string
+          description: |
+            Error message describing what went wrong.
+            May include specific validation failures or system errors.
+          example: "Insufficient margin for order placement"
+        code:
+          type: integer
+          description: |
+            Numeric error code for programmatic handling.
+            Different codes indicate different types of failures.
+          example: 1001
+        details:
+          type: object
+          description: |
+            Additional error details and context.
+            May include field-specific validation errors.
+
+    # Additional request/response schemas for specific endpoints
+    AllMidsRequest:
+      allOf:
+        - $ref: '#/components/schemas/InfoRequest'
+        - type: object
+          properties:
+            type:
+              enum: ["allMids"]
+              description: |
+                Request mid prices for all available trading pairs.
+                Uses order book midpoint when available, last trade price as fallback.
+
+    OpenOrdersRequest:
+      allOf:
+        - $ref: '#/components/schemas/InfoRequest'
+        - type: object
+          required:
+            - user
+          properties:
+            type:
+              enum: ["openOrders"]
+              description: Retrieve user's currently active orders across all markets
+            user:
+              description: |
+                User's Ethereum address. Required for this endpoint.
+                Must have active orders to return data.
+
+    UserFillsRequest:
+      allOf:
+        - $ref: '#/components/schemas/InfoRequest'
+        - type: object
+          required:
+            - user
+          properties:
+            type:
+              enum: ["userFills"]
+              description: |
+                Get user's recent trade executions (up to 2000 most recent).
+                Includes both perpetual and spot market fills.
+            user:
+              description: User's Ethereum address for fill history
+            aggregateByTime:
+              type: boolean
+              description: |
+                If true, aggregate multiple fills at same timestamp.
+                Useful for reducing data volume in high-frequency trading.
+              default: false
+
+    UserFillsByTimeRequest:
+      allOf:
+        - $ref: '#/components/schemas/InfoRequest'
+        - type: object
+          required:
+            - user
+            - startTime
+          properties:
+            type:
+              enum: ["userFillsByTime"]
+              description: |
+                Get user's trade fills within a specific time range.
+                Limited to 2000 fills maximum per request.
+            user:
+              description: User's Ethereum address
+            startTime:
+              type: integer
+              format: int64
+              description: |
+                Start time filter in milliseconds.
+                Only fills after this time are returned.
+              example: 1681923833000
+            endTime:
+              type: integer
+              format: int64
+              description: |
+                End time filter in milliseconds.
+                Defaults to current time if not specified.
+              example: 1681924833000
+            aggregateByTime:
+              type: boolean
+              description: Aggregate fills at same timestamp
+              default: false
+
+    L2BookRequest:
+      allOf:
+        - $ref: '#/components/schemas/InfoRequest'
+        - type: object
+          required:
+            - coin
+          properties:
+            type:
+              enum: ["l2Book"]
+              description: |
+                Get Level 2 order book snapshot with aggregated liquidity.
+                Essential for market making and liquidity analysis.
+            coin:
+              type: string
+              description: |
+                Trading pair symbol to get order book for.
+                Must be a valid active market.
+              example: "BTC"
+            nSigFigs:
+              type: integer
+              description: |
+                Number of significant figures for price precision.
+                Higher values provide more granular price levels.
+              default: 5
+              minimum: 1
+              maximum: 6
+            mantissa:
+              type: integer
+              description: |
+                Mantissa for price level grouping.
+                Controls the granularity of price aggregation.
+
+    ClearinghouseStateRequest:
+      allOf:
+        - $ref: '#/components/schemas/InfoRequest'
+        - type: object
+          required:
+            - user
+          properties:
+            type:
+              enum: ["clearinghouseState"]
+              description: |
+                Get comprehensive account state including margin, positions, and risk metrics.
+                Critical for risk management and account monitoring.
+            user:
+              description: |
+                User's Ethereum address to get clearinghouse state for.
+                Returns margin summary, positions, and withdrawable amounts.
+
+    OrderStatusRequest:
+      allOf:
+        - $ref: '#/components/schemas/InfoRequest'
+        - type: object
+          required:
+            - user
+            - oid
+          properties:
+            type:
+              enum: ["orderStatus"]
+              description: |
+                Check the current status and details of a specific order.
+                Useful for order tracking and debugging.
+            user:
+              description: User's Ethereum address who placed the order
+            oid:
+              oneOf:
+                - type: integer
+                  format: int64
+                - type: string
+              description: |
+                Order ID (numeric) or client order ID (string) to check.
+                Use the identifier returned from order placement.
+              example: 127244980388
+
+    UserFundingRequest:
+      allOf:
+        - $ref: '#/components/schemas/InfoRequest'
+        - type: object
+          required:
+            - user
+            - startTime
+          properties:
+            type:
+              enum: ["userFunding"]
+              description: |
+                Retrieve funding payment history for perpetual positions.
+                Shows funding rates paid/received over time.
+            user:
+              description: User's Ethereum address
+            startTime:
+              type: integer
+              format: int64
+              description: |
+                Start time for funding history in milliseconds.
+                Funding typically occurs every 8 hours.
+              example: 1681923833000
+            endTime:
+              type: integer
+              format: int64
+              description: |
+                End time for funding history in milliseconds.
+                Defaults to current time if not provided.
+              example: 1681924833000
+
+    CandleSnapshotRequest:
+      allOf:
+        - $ref: '#/components/schemas/InfoRequest'
+        - type: object
+          required:
+            - req
+          properties:
+            type:
+              enum: ["candleSnapshot"]
+              description: |
+                Get historical price candles for technical analysis and charting.
+                Provides OHLCV data for specified time intervals.
+            req:
+              type: object
+              required:
+                - coin
+                - interval
+                - startTime
+                - endTime
+              properties:
+                coin:
+                  type: string
+                  description: Trading pair symbol
+                  example: "BTC"
+                interval:
+                  type: string
+                  enum: ["1m", "5m", "15m", "1h", "4h", "1d"]
+                  description: |
+                    Candle time interval:
+                    - "1m": 1 minute candles
+                    - "5m": 5 minute candles
+                    - "15m": 15 minute candles
+                    - "1h": 1 hour candles
+                    - "4h": 4 hour candles
+                    - "1d": 1 day candles
+                  example: "1h"
+                startTime:
+                  type: integer
+                  format: int64
+                  description: Start time for candle data in milliseconds
+                  example: 1681920000000
+                endTime:
+                  type: integer
+                  format: int64
+                  description: End time for candle data in milliseconds
+                  example: 1681923600000
+
+paths:
+  /info:
+    post:
+      summary: Information Endpoint
+      description: |
+        General-purpose endpoint for retrieving market data, user account information,
+        and exchange status. Does not require authentication for public data.
+
+        **Rate Limit:** 20 weight for most requests, 2 weight for allMids/l2Book, 60 weight for userRole
+        **Authentication:** Not required for public data, required for user-specific data
+
+        **Available Methods:**
+        - Market data: allMids, l2Book, candleSnapshot, exchangeStatus
+        - User data: openOrders, userFills, userFunding, clearinghouseState
+        - Order data: orderStatus, historicalOrders
+        - Account data: subAccounts, portfolio, liquidatable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/AllMidsRequest'
+                - $ref: '#/components/schemas/OpenOrdersRequest'
+                - $ref: '#/components/schemas/UserFillsRequest'
+                - $ref: '#/components/schemas/L2BookRequest'
+                - $ref: '#/components/schemas/ClearinghouseStateRequest'
+                - $ref: '#/components/schemas/OrderStatusRequest'
+                - $ref: '#/components/schemas/UserFundingRequest'
+      responses:
+        '200':
+          description: Successful response with requested data
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AllMidsResponse'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/OpenOrder'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/Fill'
+                  - $ref: '#/components/schemas/L2BookResponse'
+        '400':
+          description: Bad request - invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /exchange:
+    post:
+      summary: Exchange Operations
+      description: |
+        Execute trading operations including order placement, cancellation, modification,
+        and account management. All operations require cryptographic signature authentication.
+
+        **Rate Limit:** 1 + floor(batch_length / 40) weight per request
+        **Authentication:** Required (cryptographic signature)
+
+        **Available Operations:**
+        - Trading: place orders, cancel orders, modify orders
+        - Risk Management: update leverage, isolated margin
+        - Advanced: TWAP orders, schedule cancel (dead man's switch)
+        - Account: USDC transfers, spot transfers, withdrawals
+      security:
+        - HyperliquidSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeRequest'
+            examples:
+              place_order:
+                summary: Place a limit order
+                value:
+                  action:
+                    type: "order"
+                    orders:
+                      - a: 0
+                        b: true
+                        p: "43250.0"
+                        s: "0.1"
+                        r: false
+                        t:
+                          limit:
+                            tif: "Gtc"
+                  nonce: 1681923833000
+                  signature:
+                    r: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+                    s: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+                    v: 27
+              cancel_order:
+                summary: Cancel an order
+                value:
+                  action:
+                    type: "cancel"
+                    cancels:
+                      - a: 0
+                        o: 127244980388
+                  nonce: 1681923834000
+                  signature:
+                    r: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+                    s: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+                    v: 27
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    description: Operation result status
+                    example: "ok"
+                  response:
+                    type: object
+                    description: Operation-specific response data
+        '400':
+          description: Bad request - invalid parameters or insufficient funds
+        '401':
+          description: Authentication failed - invalid signature
+        '429':
+          description: Rate limit exceeded
