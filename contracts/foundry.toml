@@ -14,10 +14,13 @@ auto_detect_solc = false
 bytecode_hash = "none"
 cbor_metadata = false
 
+# File access permissions
+fs_permissions = [{ access = "read", path = "." }]
+
 # Hyperliquid configuration
 [rpc_endpoints]
-hyperliquid_testnet = "https://api.hyperliquid-testnet.xyz/evm"
-hyperliquid_mainnet = "https://api.hyperliquid.xyz/evm"
+hyperliquid_testnet = "https://rpc.hyperliquid-testnet.xyz/evm"
+hyperliquid_mainnet = "https://hlh-builders-jp-mainnet.hyperpc.app?use-upstream=hlnode"
 
 [fmt]
 line_length = 100
