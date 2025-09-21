@@ -38,9 +38,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
 thiserror = "1.0"
 
-# Intel TDX attestation
-dcap-qvl = { git = "https://github.com/automata-network/tdx-attestation-sdk", branch = "main" }
-tdx-attest = { git = "https://github.com/automata-network/tdx-attestation-sdk", branch = "main" }
+# Intel TDX attestation (temporarily disabled for basic proxy testing)
+# dcap-qvl = { git = "https://github.com/automata-network/tdx-attestation-sdk", branch = "main" }
+# tdx-attest = { git = "https://github.com/automata-network/tdx-attestation-sdk", branch = "main" }
 base64 = "0.22"
 uuid = { version = "1.0", features = ["v4"] }
 
@@ -54,7 +54,3 @@ database = ["sqlx"]
 [[bin]]
 name = "server"
 path = "src/main.rs"
-
-[[bin]]
-name = "setup-attestation"
-path = "src/bin/setup.rs"

@@ -1,72 +1,66 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::State,
     http::StatusCode,
     response::Json,
     routing::{get, post},
     Router,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
-use tracing::{info, warn};
+use tracing::{info, warn, error};
 
-mod agent;
-mod attestation;
+mod config;
 mod proxy;
-mod types;
 
-use agent::AgentManager;
-use attestation::TdxAttestation;
+use config::Config;
 use proxy::HyperliquidProxy;
-use types::*;
 
 #[derive(Clone)]
 pub struct AppState {
-    agent_manager: Arc<RwLock<AgentManager>>,
     proxy: Arc<HyperliquidProxy>,
-    attestation: Arc<TdxAttestation>,
+    config: Arc<Config>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::init();
+    // Initialize tracing with better configuration
+    tracing_subscriber::fmt()
+        .with_env_filter("info")
+        .init();
 
-    info!("Starting TEE Agent Server");
+    println!("🚀 Starting TDX Agent Server...");
+    info!("Starting TDX Agent Server");
 
-    // Initialize components
-    let agent_manager = Arc::new(RwLock::new(AgentManager::new()));
-    let proxy = Arc::new(HyperliquidProxy::new("https://api.hyperliquid.xyz".to_string()));
-    let attestation = Arc::new(TdxAttestation::new()?);
+    // Load configuration
+    let config = Arc::new(Config::from_env());
+    
+    // Initialize Hyperliquid proxy
+    let proxy = Arc::new(HyperliquidProxy::new(&config.hyperliquid_url));
 
     let state = AppState {
-        agent_manager,
         proxy,
-        attestation,
+        config,
     };
 
     // Build router
     let app = Router::new()
         .route("/health", get(health_check))
-        .route("/register-agent", post(register_agent))
-        .route("/agents/:user_id", get(get_agent))
-        .route("/attestation", get(get_attestation))
-        // Hyperliquid proxy routes
-        .route("/info/*path", get(proxy_info))
-        .route("/exchange/*path", post(proxy_exchange))
+        .route("/info", post(proxy_info))
+        .route("/exchange", post(proxy_exchange))
         .with_state(state)
         .layer(CorsLayer::permissive());
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
-    info!("Server running on http://0.0.0.0:8080");
+    println!("🌐 TDX Agent Server running on http://0.0.0.0:8080");
+    info!("TDX Agent Server running on http://0.0.0.0:8080");
 
     axum::serve(listener, app).await?;
 
     Ok(())
 }
 
-async fn health_check() -> Json<serde_json::Value> {
+async fn health_check() -> Json<Value> {
     Json(serde_json::json!({
         "status": "healthy",
         "service": "tdx-agent-server",
@@ -74,84 +68,30 @@ async fn health_check() -> Json<serde_json::Value> {
     }))
 }
 
-async fn register_agent(
-    State(state): State<AppState>,
-    Json(payload): Json<RegisterAgentRequest>,
-) -> Result<Json<RegisterAgentResponse>, StatusCode> {
-    info!("Registering agent for user: {}", payload.user_id);
-
-    // Generate attestation report
-    let attestation_report = match state.attestation.generate_report().await {
-        Ok(report) => report,
-        Err(e) => {
-            warn!("Failed to generate attestation: {:?}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
-
-    // Create new agent
-    let mut manager = state.agent_manager.write().await;
-    let agent = match manager.create_agent(&payload.user_id).await {
-        Ok(agent) => agent,
-        Err(e) => {
-            warn!("Failed to create agent: {:?}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
-
-    Ok(Json(RegisterAgentResponse {
-        agent_address: agent.address,
-        api_key: agent.api_key,
-        attestation_report,
-    }))
-}
-
-async fn get_agent(
-    State(state): State<AppState>,
-    Path(user_id): Path<String>,
-) -> Result<Json<AgentInfo>, StatusCode> {
-    let manager = state.agent_manager.read().await;
-    
-    match manager.get_agent(&user_id) {
-        Some(agent) => Ok(Json(AgentInfo {
-            address: agent.address.clone(),
-            user_id: agent.user_id.clone(),
-            created_at: agent.created_at,
-        })),
-        None => Err(StatusCode::NOT_FOUND),
-    }
-}
-
-async fn get_attestation(
-    State(state): State<AppState>,
-) -> Result<Json<AttestationData>, StatusCode> {
-    match state.attestation.generate_report().await {
-        Ok(report) => Ok(Json(report)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-
 async fn proxy_info(
     State(state): State<AppState>,
-    Path(path): Path<String>,
-    query: Query<HashMap<String, String>>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    match state.proxy.proxy_info_request(&path, &query.0).await {
-        Ok(response) => Ok(Json(response)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    info!("Proxying info request: {:?}", payload);
+
+    match state.proxy.proxy_info_request(&payload).await {
+        Ok(response) => {
+            info!("Info request successful");
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("Info request failed: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
 async fn proxy_exchange(
-    State(state): State<AppState>,
-    Path(path): Path<String>,
-    Json(payload): Json<serde_json::Value>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    // TODO: Extract API key from headers and validate
-    // TODO: Sign request with appropriate agent key
+    State(_state): State<AppState>,
+    Json(_payload): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    warn!("Exchange endpoint not yet implemented");
     
-    match state.proxy.proxy_exchange_request(&path, &payload).await {
-        Ok(response) => Ok(Json(response)),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
+    // For now, just return an error
+    Err(StatusCode::NOT_IMPLEMENTED)
 }
