@@ -60,6 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/health", get(health_check))
         .route("/info", post(proxy_info))
         .route("/exchange", post(proxy_exchange))
+        .route("/debug/agent-address", get(get_agent_address))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             |State(state): State<AppState>, req: Request, next: Next| async move {
@@ -89,6 +90,22 @@ async fn health_check() -> Json<Value> {
         "service": "tdx-agent-server",
         "version": "0.1.0"
     }))
+}
+
+async fn get_agent_address(State(state): State<AppState>) -> Json<Value> {
+    let agent_manager = state.agent_manager.read().await;
+    
+    if let Some(agent) = agent_manager.get_agent("test-key") {
+        Json(serde_json::json!({
+            "agent_address": agent.address,
+            "api_key": "test-key",
+            "note": "Master wallet must approve this agent address before trading"
+        }))
+    } else {
+        Json(serde_json::json!({
+            "error": "No agent found for test-key"
+        }))
+    }
 }
 
 async fn proxy_info(

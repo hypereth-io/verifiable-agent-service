@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(source:*)",
-      "Bash(pytest:*)"
+      "Bash(pytest:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo run:*)"
     ],
     "deny": [],
     "ask": []
