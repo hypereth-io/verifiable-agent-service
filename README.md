@@ -49,9 +49,9 @@ graph TB
 
 ### Step 1: Deploy Registry Contract
 ```bash
-# Deploy the TEE attestation registry
+# Deploy the TEE attestation registry to HyperEVM
 cd contracts
-forge script script/Deploy.s.sol --broadcast --rpc-url <HYPERLIQUID_RPC>
+forge script script/Deploy.s.sol --broadcast --rpc-url hyperliquid_testnet
 ```
 
 ### Step 2: Set Up TEE Server
@@ -69,13 +69,23 @@ curl -X POST http://tdx-server:8080/register-agent \
   -d '{"user_id": "demo_user"}'
 ```
 
-### Step 4: Verify On-Chain Registration
+### Step 4: Submit Quote to Registry
 ```bash
-# Verify the TEE attestation is recorded on-chain
-cast call $REGISTRY_ADDRESS "verifyAgent(address)" $AGENT_ADDRESS
+# Register the TDX quote on-chain (returns agent address and API key from step 3)
+cast send $REGISTRY_ADDRESS "registerAgent(bytes)" $TDX_QUOTE_HEX \
+  --private-key $PRIVATE_KEY \
+  --rpc-url hyperliquid_testnet \
+  --value 0.01ether
 ```
 
-### Step 5: Use API Key for Trading
+### Step 5: Verify Agent Registration
+```bash
+# Check if agent is registered on-chain
+cast call $REGISTRY_ADDRESS "isAgentRegistered(address)" $AGENT_ADDRESS \
+  --rpc-url hyperliquid_testnet
+```
+
+### Step 6: Use API Key for Trading
 ```bash
 # Use API key to interact with agent (no local keys needed)
 curl -X POST http://tdx-server:8080/exchange/order \
@@ -92,8 +102,10 @@ curl -X POST http://tdx-server:8080/exchange/order \
 ## Components
 
 ### 🔐 Smart Contract Registry (`/contracts`)
-- **Registry.sol**: Verifies Intel TDX attestation reports
-- **AgentManager.sol**: Manages registered agent wallets
+- **Registry.sol**: Transparent append-only log of verified TEE agents
+- **AttestationHelper.sol**: Library for parsing TDX quotes and extracting agent addresses
+- **TDXStructs.sol**: Data structures for Intel TDX attestation
+- Integrates with Automata DCAP v1.1 deployed on HyperEVM
 - Built with Foundry for Hyperliquid deployment
 
 ### 🖥️ TEE API Server (`/tdx-server`)
@@ -137,11 +149,20 @@ cd ../tdx-server && cargo build --release
 ## Development Status
 
 - [x] Project structure and documentation
-- [ ] Smart contract implementation
+- [x] Smart contract implementation (Registry + AttestationHelper)
+- [x] TDX protocol specification and data structures
+- [x] Automata DCAP integration on HyperEVM
+- [x] Comprehensive test suite
 - [ ] TEE server core functionality
 - [ ] API proxy implementation
 - [ ] Integration testing
 - [ ] Demo deployment
+
+## Protocol Documentation
+
+- **[Protocol Specification](docs/PROTOCOL.md)**: Complete specification for embedding agent addresses in TDX quotes
+- **[Deployment Guide](docs/DEPLOYMENT.md)**: Contract addresses and deployment instructions
+- **[Smart Contracts](contracts/src/)**: Registry and helper contracts with full documentation
 
 ## Contributing
 
