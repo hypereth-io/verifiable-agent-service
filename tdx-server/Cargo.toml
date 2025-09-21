@@ -26,6 +26,9 @@ hex = "0.4"
 # HTTP client
 reqwest = { version = "0.12", features = ["json"] }
 
+# Hyperliquid Rust SDK
+hyperliquid_rust_sdk = "0.6.0"
+
 # Environment and configuration
 dotenvy = "0.15"
 config = "0.14"

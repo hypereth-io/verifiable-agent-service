@@ -1,6 +1,6 @@
 use axum::{
     extract::{Request, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::Json,
     routing::{get, post},
@@ -8,13 +8,17 @@ use axum::{
 };
 use serde_json::Value;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 use tracing::{info, warn, error};
 
+mod agent;
 mod auth;
 mod config;
 mod proxy;
+mod signing;
 
+use agent::AgentManager;
 use config::Config;
 use proxy::HyperliquidProxy;
 
@@ -22,6 +26,7 @@ use proxy::HyperliquidProxy;
 pub struct AppState {
     proxy: Arc<HyperliquidProxy>,
     config: Arc<Config>,
+    agent_manager: Arc<RwLock<AgentManager>>,
 }
 
 #[tokio::main]
@@ -37,12 +42,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configuration
     let config = Arc::new(Config::from_env());
     
-    // Initialize Hyperliquid proxy
+    // Initialize components
     let proxy = Arc::new(HyperliquidProxy::new(&config.hyperliquid_url));
+    let agent_manager = Arc::new(RwLock::new(AgentManager::new()));
 
     let state = AppState {
         proxy,
         config,
+        agent_manager,
     };
 
     // Build router with authentication for /exchange endpoints
@@ -100,11 +107,61 @@ async fn proxy_info(
 }
 
 async fn proxy_exchange(
-    State(_state): State<AppState>,
-    Json(_payload): Json<Value>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(mut payload): Json<Value>,
 ) -> Result<Json<Value>, StatusCode> {
-    warn!("Exchange endpoint not yet implemented");
+    info!("Processing exchange request: {:?}", payload);
     
-    // For now, just return an error
-    Err(StatusCode::NOT_IMPLEMENTED)
+    // Extract API key (already validated by middleware)
+    let api_key = headers
+        .get("X-API-Key")
+        .and_then(|value| value.to_str().ok())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    
+    // Get agent private key for this API key
+    let agent_manager = state.agent_manager.read().await;
+    let private_key = agent_manager
+        .get_private_key(api_key)
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    
+    // Extract required fields
+    let action = payload
+        .get("action")
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    
+    let nonce = payload
+        .get("nonce")
+        .and_then(|n| n.as_u64())
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    
+    // Extract optional vault address
+    let vault_address = payload
+        .get("vaultAddress")
+        .and_then(|v| v.as_str());
+    
+    // Sign the request
+    match signing::sign_exchange_request(action, nonce, private_key, vault_address) {
+        Ok(signature) => {
+            // Add signature to payload
+            payload["signature"] = signature.to_json();
+            info!("Request signed successfully");
+            
+            // Forward signed request to Hyperliquid
+            match state.proxy.proxy_exchange_request(&payload).await {
+                Ok(response) => {
+                    info!("Exchange request successful");
+                    Ok(Json(response))
+                }
+                Err(e) => {
+                    error!("Exchange request failed: {:?}", e);
+                    Err(StatusCode::BAD_GATEWAY)
+                }
+            }
+        }
+        Err(e) => {
+            error!("Signing failed: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
