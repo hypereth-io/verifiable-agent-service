@@ -7,6 +7,14 @@ contracts/broadcast/
 # Rust
 tdx-server/target/
 
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
 # IDE
 .vscode/
 .idea/
