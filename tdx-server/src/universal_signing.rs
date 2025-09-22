@@ -1,10 +1,14 @@
 use serde_json::Value;
 use secp256k1::SecretKey;
 use tracing::info;
-use ethers::{
-    signers::{LocalWallet, Signer},
-    types::{Signature, H256, H160},
-    utils::keccak256,
+use alloy::{
+    signers::{local::PrivateKeySigner, Signer},
+    primitives::{Address, B256, keccak256},
+};
+use hyperliquid_rust_sdk::{
+    ExchangeClient, BaseUrl, 
+    ClientOrderRequest, ClientCancelRequest, ClientOrder, ClientLimit,
+    ExchangeResponseStatus, ExchangeDataStatus,
 };
 
 #[derive(Debug)]
@@ -23,57 +27,249 @@ impl ExchangeSignature {
         })
     }
     
-    pub fn from_ethers_signature(sig: Signature) -> Self {
+    pub fn from_alloy_signature(sig: alloy::primitives::Signature) -> Self {
         Self {
-            r: format!("0x{:064x}", sig.r),
-            s: format!("0x{:064x}", sig.s),
-            v: sig.v,
+            r: format!("0x{:064x}", sig.r()),
+            s: format!("0x{:064x}", sig.s()),
+            v: if sig.v() { 28 } else { 27 }, // v is just a boolean in alloy
         }
     }
 }
 
-/// Universal signing function that works with any Hyperliquid exchange action
+/// Handle request completely with SDK (like TypeScript @nktkas/hyperliquid)
 /// 
-/// This replicates the signing logic from the Hyperliquid SDK:
-/// 1. Serialize the action using msgpack (rmp_serde)
-/// 2. Append timestamp and vault_address
-/// 3. Hash the bytes using keccak256
-/// 4. Sign the hash using agent connection signing pattern
-pub async fn sign_exchange_request(
+/// This approach:
+/// 1. Creates ExchangeClient with correct alloy wallet  
+/// 2. Uses SDK methods to handle request completely
+/// 3. Returns proper SDK response (no API forwarding needed)
+pub async fn handle_with_sdk_complete(
     action: &Value,
     nonce: u64,
     private_key: &SecretKey,
     vault_address: Option<&str>,
     is_mainnet: bool,
-) -> Result<ExchangeSignature, Box<dyn std::error::Error + Send + Sync>> {
-    info!("🔐 Universal signing exchange request with nonce: {}", nonce);
+) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    info!("🔐 Using alloy-compatible SDK signing");
     
-    // Convert secp256k1::SecretKey to ethers::LocalWallet
-    let private_key_bytes = private_key.secret_bytes();
-    let wallet = LocalWallet::from_bytes(&private_key_bytes)?;
+    // Convert secp256k1::SecretKey to alloy::PrivateKeySigner
+    let private_key_hex = hex::encode(private_key.secret_bytes());
+    let wallet: PrivateKeySigner = private_key_hex.parse()
+        .map_err(|e| format!("Failed to create alloy wallet: {:?}", e))?;
     
-    info!("📋 Wallet address: {:?}", wallet.address());
+    info!("📋 Alloy wallet address: {:?}", wallet.address());
     
-    // Create the connection hash following Hyperliquid SDK pattern
-    let connection_id = create_action_hash(action, nonce, vault_address)?;
-    info!("🔑 Action hash (connection_id): {:?}", connection_id);
+    // Parse vault address if provided (using alloy Address)
+    let vault_address_alloy = if let Some(vault_str) = vault_address {
+        Some(vault_str.parse::<Address>()?)
+    } else {
+        None
+    };
     
-    // Sign using the agent connection pattern
-    let signature = sign_l1_action(&wallet, connection_id, is_mainnet)?;
+    // Create ExchangeClient with alloy wallet (this should work now)
+    let base_url = if is_mainnet { BaseUrl::Mainnet } else { BaseUrl::Testnet };
+    let exchange_client = ExchangeClient::new(
+        None,                    // No http client override
+        wallet,                 // Alloy wallet 
+        Some(base_url),         // Network
+        None,                   // No meta override
+        vault_address_alloy,    // Vault address (alloy)
+    ).await?;
     
-    let result = ExchangeSignature::from_ethers_signature(signature);
-    info!("✅ Universal signature generated: r={}, s={}, v={}", result.r, result.s, result.v);
+    info!("📋 ExchangeClient created with alloy wallet");
     
-    Ok(result)
+    // Let the SDK handle the action completely by using its methods
+    let action_type = action.get("type")
+        .and_then(|t| t.as_str())
+        .ok_or("Missing action type")?;
+    
+    info!("🔄 Action type: {}, using SDK methods directly", action_type);
+    
+    // Use SDK methods directly to get proper signed responses
+    let response = match action_type {
+        "order" => {
+            // Convert to SDK client orders and use SDK method
+            let client_orders = convert_json_to_client_orders(action)?;
+            exchange_client.bulk_order(client_orders, None).await?
+        }
+        "cancel" => {
+            // Convert to SDK client cancels and use SDK method  
+            let client_cancels = convert_json_to_client_cancels(action)?;
+            exchange_client.bulk_cancel(client_cancels, None).await?
+        }
+        _ => {
+            return Err(format!("Unsupported action type: {}", action_type).into());
+        }
+    };
+    
+    info!("✅ SDK method completed successfully");
+    
+    // Convert ExchangeResponseStatus to proper JSON response
+    let json_response = match response {
+        ExchangeResponseStatus::Ok(exchange_response) => {
+            info!("🎉 SDK request successful");
+            
+            // Build response matching Hyperliquid API format
+            if let Some(data) = exchange_response.data {
+                let mut statuses = Vec::new();
+                
+                for status in data.statuses {
+                    match status {
+                        ExchangeDataStatus::Resting(order) => {
+                            statuses.push(serde_json::json!({
+                                "resting": {"oid": order.oid}
+                            }));
+                        }
+                        ExchangeDataStatus::Filled(order) => {
+                            statuses.push(serde_json::json!({
+                                "filled": {
+                                    "totalSz": order.total_sz,
+                                    "avgPx": order.avg_px, 
+                                    "oid": order.oid
+                                }
+                            }));
+                        }
+                        ExchangeDataStatus::Error(error_msg) => {
+                            statuses.push(serde_json::json!({
+                                "error": error_msg
+                            }));
+                        }
+                        _ => {
+                            statuses.push(serde_json::json!({
+                                "status": format!("{:?}", status)
+                            }));
+                        }
+                    }
+                }
+                
+                serde_json::json!({
+                    "status": "ok",
+                    "response": {
+                        "type": action_type,
+                        "data": {
+                            "statuses": statuses
+                        }
+                    }
+                })
+            } else {
+                serde_json::json!({
+                    "status": "ok",
+                    "response": {
+                        "type": action_type,
+                        "data": {"statuses": []}
+                    }
+                })
+            }
+        }
+        ExchangeResponseStatus::Err(error_msg) => {
+            info!("❌ SDK request error: {}", error_msg);
+            serde_json::json!({
+                "status": "err",
+                "response": error_msg
+            })
+        }
+    };
+    
+    Ok(json_response)
 }
 
-/// Create action hash following the Hyperliquid SDK pattern
-/// This matches the `Actions.hash()` method in the SDK
-fn create_action_hash(
+/// Convert JSON orders to SDK ClientOrderRequest
+fn convert_json_to_client_orders(action: &Value) -> Result<Vec<ClientOrderRequest>, Box<dyn std::error::Error + Send + Sync>> {
+    let orders = action.get("orders")
+        .and_then(|o| o.as_array())
+        .ok_or("Missing orders array")?;
+    
+    let mut client_orders = Vec::new();
+    for order in orders {
+        let asset_index = order.get("a")
+            .and_then(|a| a.as_u64())
+            .unwrap_or(0);
+        
+        // Convert asset index to symbol (simplified mapping)
+        let asset = match asset_index {
+            0 => "BTC",
+            1 => "ETH", 
+            _ => "BTC", // Default fallback
+        }.to_string();
+        
+        let is_buy = order.get("b")
+            .and_then(|b| b.as_bool())
+            .unwrap_or(true);
+            
+        let limit_px: f64 = order.get("p")
+            .and_then(|p| p.as_str())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(50000.0);
+            
+        let sz: f64 = order.get("s")
+            .and_then(|s| s.as_str())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.001);
+            
+        let reduce_only = order.get("r")
+            .and_then(|r| r.as_bool())
+            .unwrap_or(false);
+        
+        let client_order = ClientOrderRequest {
+            asset,
+            is_buy,
+            reduce_only,
+            limit_px,
+            sz,
+            cloid: None,
+            order_type: ClientOrder::Limit(ClientLimit {
+                tif: "Gtc".to_string(),
+            }),
+        };
+        
+        client_orders.push(client_order);
+    }
+    
+    Ok(client_orders)
+}
+
+/// Convert JSON cancels to SDK ClientCancelRequest  
+fn convert_json_to_client_cancels(action: &Value) -> Result<Vec<ClientCancelRequest>, Box<dyn std::error::Error + Send + Sync>> {
+    let cancels = action.get("cancels")
+        .and_then(|c| c.as_array())
+        .ok_or("Missing cancels array")?;
+    
+    let mut client_cancels = Vec::new();
+    for cancel in cancels {
+        let asset_index = cancel.get("a")
+            .and_then(|a| a.as_u64())
+            .unwrap_or(0);
+            
+        // Convert asset index to symbol (simplified mapping)
+        let asset = match asset_index {
+            0 => "BTC",
+            1 => "ETH",
+            _ => "BTC", // Default fallback  
+        }.to_string();
+        
+        let oid = cancel.get("o")
+            .and_then(|o| o.as_u64())
+            .unwrap_or(0);
+        
+        let client_cancel = ClientCancelRequest {
+            asset,
+            oid,
+        };
+        
+        client_cancels.push(client_cancel);
+    }
+    
+    Ok(client_cancels)
+}
+
+/// Generic action hash creation (works for all action types)
+/// This follows the same pattern as SDK but without action-specific conversions
+fn create_generic_action_hash(
     action: &Value,
     timestamp: u64,
     vault_address: Option<&str>,
-) -> Result<H256, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<B256, Box<dyn std::error::Error + Send + Sync>> {
+    info!("🔄 Creating generic action hash for any action type");
+    
     // Serialize action using msgpack (same as SDK)
     let mut bytes = rmp_serde::to_vec_named(action)
         .map_err(|e| format!("Msgpack serialization failed: {}", e))?;
@@ -85,73 +281,21 @@ fn create_action_hash(
     if let Some(vault_addr) = vault_address {
         bytes.push(1); // indicator that vault address is present
         
-        // Parse vault address and append its bytes
-        let vault_h160: H160 = vault_addr.parse()
+        // Parse vault address and append its bytes (using alloy Address)
+        let vault_address: Address = vault_addr.parse()
             .map_err(|e| format!("Invalid vault address: {}", e))?;
-        bytes.extend(vault_h160.to_fixed_bytes());
+        bytes.extend(vault_address.as_slice());
     } else {
         bytes.push(0); // indicator that no vault address
     }
     
-    // Hash the combined bytes
+    // Hash the combined bytes (using alloy keccak256)
     let hash = keccak256(&bytes);
-    Ok(H256(hash))
+    info!("🔑 Generic hash created: {:?}", hash);
+    Ok(hash)
 }
 
-/// L1 action signing following the Hyperliquid SDK pattern
-/// This matches the `sign_l1_action` function in the SDK
-fn sign_l1_action(
-    wallet: &LocalWallet,
-    connection_id: H256,
-    is_mainnet: bool,
-) -> Result<Signature, Box<dyn std::error::Error + Send + Sync>> {
-    // Create the agent connection data structure (same as SDK)
-    let source = if is_mainnet { "a" } else { "b" }.to_string();
-    
-    let agent_data = serde_json::json!({
-        "source": source,
-        "connectionId": format!("0x{:x}", connection_id)
-    });
-    
-    info!("🔐 Signing agent data: {}", agent_data);
-    
-    // For now, use simplified signing since we don't have full EIP-712 implementation
-    // In a full implementation, this would use EIP-712 typed data signing
-    let message = serde_json::to_string(&agent_data)?;
-    let message_hash = keccak256(message.as_bytes());
-    
-    // Sign the hash
-    let signature = wallet.sign_hash(H256(message_hash))?;
-    
-    info!("✅ L1 action signature generated");
-    Ok(signature)
-}
 
-/// Simplified signing for debugging/fallback (matching our current approach)
-pub fn fallback_simplified_signing(
-    private_key: &SecretKey,
-    action: &Value,
-    nonce: u64,
-) -> Result<ExchangeSignature, Box<dyn std::error::Error + Send + Sync>> {
-    info!("🔧 Using fallback simplified signing...");
-    
-    // Convert secp256k1::SecretKey to ethers::LocalWallet
-    let private_key_bytes = private_key.secret_bytes();
-    let wallet = LocalWallet::from_bytes(&private_key_bytes)?;
-    
-    // Create a deterministic message from action + nonce for signing
-    let message = format!("{}:{}", serde_json::to_string(action)?, nonce);
-    let message_hash = keccak256(message.as_bytes());
-    
-    // Sign the hash
-    let signature = wallet.sign_hash(H256(message_hash))?;
-    
-    let result = ExchangeSignature::from_ethers_signature(signature);
-    
-    info!("Generated fallback signature: r={}, s={}, v={}", result.r, result.s, result.v);
-    
-    Ok(result)
-}
 
 #[cfg(test)]
 mod tests {

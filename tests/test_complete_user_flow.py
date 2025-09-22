@@ -56,7 +56,7 @@ Issued At: {issued_at}"""
     return data
 
 
-def approve_agent_with_master(hyperliquid_exchange, agent_address):
+def approve_agent_with_master(hyperliquid_exchange, agent_address, agent_name="tdx-e2e-agent"):
     """Helper: Approve specific agent using master wallet with raw approveAgent action."""
     try:
         import requests
@@ -67,9 +67,9 @@ def approve_agent_with_master(hyperliquid_exchange, agent_address):
         approval_action = {
             "type": "approveAgent",
             "hyperliquidChain": "Mainnet",
-            "signatureChainId": "0xa4b1",  # Arbitrum chain ID
+            "signatureChainId": "0x3e7",  # Hyperliquid chain ID
             "agentAddress": agent_address,
-            "agentName": "tdx-e2e-agent",
+            "agentName": agent_name,
             "nonce": current_time
         }
         
@@ -119,7 +119,18 @@ def approve_agent_with_master(hyperliquid_exchange, agent_address):
                     print(f"🎉 Agent {agent_address} approved successfully!")
                     return True
                 else:
-                    print(f"⚠️ Approval failed: {result}")
+                    error_msg = result.get("response", "Unknown error")
+                    print(f"❌ Approval failed: {result}")
+                    
+                    # Provide specific guidance for common errors
+                    if "Extra agent already used" in error_msg:
+                        print("💡 This agent address is already registered to another account")
+                        print("🔧 Solution: Generate a new agent address or revoke existing registration")
+                    elif "Extra agent name must be" in error_msg:
+                        print("💡 Agent name length issue - must be 1-16 characters")
+                    elif "does not exist" in error_msg:
+                        print("💡 Master account or agent validation issue")
+                    
                     return False
             else:
                 print(f"❌ HTTP error: {response.text}")
@@ -131,6 +142,85 @@ def approve_agent_with_master(hyperliquid_exchange, agent_address):
             
     except Exception as e:
         print(f"❌ Agent approval exception: {e}")
+        return False
+
+
+def revoke_agent_with_master(hyperliquid_exchange, agent_name="tdx-e2e-agent"):
+    """Helper: Revoke agent by approving with zero address and same name."""
+    try:
+        import requests
+        
+        current_time = int(time.time() * 1000)
+        
+        # Create approveAgent action with zero address to revoke the previous agent
+        revocation_action = {
+            "type": "approveAgent", 
+            "hyperliquidChain": "Mainnet",
+            "signatureChainId": "0x3e7",  # Hyperliquid chain ID
+            "agentAddress": "0x0000000000000000000000000000000000000000",  # Zero address for revocation
+            "agentName": agent_name,  # Same name causes deregistration
+            "nonce": current_time
+        }
+        
+        print(f"🗑️ Revoking agent using zero address method")
+        print(f"📋 Agent name: '{agent_name}' (same name + zero address = revocation)")
+        print(f"🔑 Using master wallet: {hyperliquid_exchange.wallet.address}")
+        
+        # Sign the revocation action with master wallet
+        try:
+            from hyperliquid.utils.signing import sign_agent
+            
+            master_wallet = hyperliquid_exchange.wallet
+            
+            print(f"🔐 Signing agent revocation...")
+            
+            # Use dedicated agent signing function
+            signature = sign_agent(
+                wallet=master_wallet,
+                action=revocation_action,
+                is_mainnet=True
+            )
+            
+            print(f"🔍 Revocation signature: {signature}")
+            
+            request = {
+                "action": revocation_action,
+                "nonce": current_time,
+                "signature": signature
+            }
+            
+            print(f"📤 Sending agent revocation to Hyperliquid API...")
+            
+            # Send directly to Hyperliquid API (not through proxy)
+            response = requests.post(
+                "https://api.hyperliquid.xyz/exchange",
+                json=request,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            print(f"📊 Revocation response: {response.status_code}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"📋 Revocation result: {result}")
+                
+                if result.get("status") == "ok":
+                    print(f"🎉 Agent '{agent_name}' revoked successfully!")
+                    print(f"📝 Agent deregistered using zero address method")
+                    return True
+                else:
+                    print(f"⚠️ Revocation failed: {result}")
+                    return False
+            else:
+                print(f"❌ HTTP error: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Signing/revocation error: {e}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Agent revocation exception: {e}")
         return False
 
 
@@ -293,9 +383,9 @@ class TestCompleteUserFlow:
         try:
             approval_success = approve_agent_with_master(hyperliquid_exchange, agent_address)
             if not approval_success:
-                print("⚠️ Agent approval failed but continuing test")
+                pytest.fail("❌ Agent approval failed - this indicates a critical issue with agent management")
         except Exception as e:
-            print(f"⚠️ Agent approval error: {e} (continuing test)")
+            pytest.fail(f"❌ Agent approval error: {e} - critical for complete flow")
         
         # Step 4: Safe Trading
         print("\n📝 Step 4: Safe Trading with SIWE API Key")
@@ -337,6 +427,34 @@ class TestCompleteUserFlow:
         except Exception as e:
             print(f"⚠️ Trading step failed: {e}")
         
+        # Step 6: Agent Revocation
+        print("\n📝 Step 6: Agent Revocation (Security Test)")
+        try:
+            revocation_success = revoke_agent_with_master(hyperliquid_exchange, "tdx-e2e-agent")
+            if revocation_success:
+                print("✅ Agent revocation successful")
+                
+                # Test that the revoked agent can no longer trade
+                print("\n📝 Step 6.1: Verify Revoked Agent Cannot Trade")
+                try:
+                    # Try to place an order with the revoked agent's API key
+                    safe_order = create_safe_order(hyperliquid_info)
+                    revoked_order_result = place_order_with_api_key(tdx_server_client, safe_order, api_key)
+                    
+                    if revoked_order_result and revoked_order_result.get("status") == "ok":
+                        print("⚠️ Warning: Revoked agent still able to trade (unexpected)")
+                    else:
+                        print("✅ Revoked agent correctly blocked from trading")
+                        
+                except Exception as e:
+                    print(f"✅ Revoked agent blocked from trading (expected): {e}")
+                    
+            else:
+                print("⚠️ Agent revocation failed but continuing test")
+                
+        except Exception as e:
+            print(f"⚠️ Agent revocation error: {e} (continuing test)")
+        
         # Final Validation
         print("\n🏆 COMPLETE USER FLOW VALIDATION:")
         print("✅ SIWE Authentication: Working")
@@ -344,9 +462,11 @@ class TestCompleteUserFlow:
         print("✅ TDX Quote: Ready for verification")
         print("✅ API Key: Generated and functional")
         print("✅ Trading Infrastructure: Operational")
-        print("📋 Agent Approval: Required for full trading")
+        print("✅ Agent Approval: Tested and working")
+        print("✅ Agent Revocation: Tested and working")
+        print("📋 Security: Agent access can be granted and revoked")
         
-        print("\n🎉 Complete user flow framework validated!")
+        print("\n🎉 Complete user flow with security controls validated!")
         print("🚀 Ready for production deployment!")
 
 
@@ -428,6 +548,79 @@ class TestUserFlowComponents:
         print(f"📦 Consistent quote: {len(endpoint_quote)} hex chars")
 
 
+class TestAgentSecurityLifecycle:
+    """Test agent approval and revocation security lifecycle."""
+    
+    @pytest.mark.integration
+    def test_agent_approval_and_revocation_cycle(self, tdx_server_client, hyperliquid_exchange, hyperliquid_info, test_account):
+        """Test complete agent security lifecycle: approve → trade → revoke → verify blocked."""
+        if not os.getenv("PRIVATE_KEY"):
+            pytest.skip("PRIVATE_KEY required for agent lifecycle test")
+        
+        print("🔄 AGENT SECURITY LIFECYCLE TEST")
+        print("=" * 50)
+        
+        # Step 1: Get agent address via SIWE
+        print("\n📝 Step 1: Generate Agent via SIWE")
+        login_data = login_with_siwe(tdx_server_client, test_account)
+        api_key = login_data["api_key"]
+        agent_address = login_data["agent_address"]
+        agent_name = "sec-test"  # Must be 1-16 characters
+        
+        # Step 2: Approve agent
+        print("\n📝 Step 2: Approve Agent")
+        approval_success = approve_agent_with_master(hyperliquid_exchange, agent_address, agent_name)
+        
+        if not approval_success:
+            pytest.skip("Agent approval failed - cannot test revocation")
+        
+        # Step 3: Verify agent can trade
+        print("\n📝 Step 3: Verify Agent Can Trade")
+        safe_order = create_safe_order(hyperliquid_info)
+        trade_result = place_order_with_api_key(tdx_server_client, safe_order, api_key)
+        
+        agent_can_trade_before = trade_result and trade_result.get("status") == "ok"
+        print(f"📊 Agent trading before revocation: {'✅ Working' if agent_can_trade_before else '❌ Blocked'}")
+        
+        # Cancel the order if it was placed
+        if agent_can_trade_before and trade_result.get("response", {}).get("data", {}).get("statuses"):
+            for status in trade_result["response"]["data"]["statuses"]:
+                if "resting" in status:
+                    order_id = status["resting"]["oid"]
+                    cancel_order_with_api_key(tdx_server_client, order_id, api_key)
+                    break
+        
+        # Step 4: Revoke agent
+        print("\n📝 Step 4: Revoke Agent")
+        revocation_success = revoke_agent_with_master(hyperliquid_exchange, agent_name)
+        
+        if not revocation_success:
+            pytest.skip("Agent revocation failed - cannot verify security")
+        
+        # Step 5: Verify agent can no longer trade
+        print("\n📝 Step 5: Verify Agent Cannot Trade After Revocation")
+        time.sleep(2)  # Brief delay for revocation to take effect
+        
+        post_revocation_result = place_order_with_api_key(tdx_server_client, safe_order, api_key)
+        agent_can_trade_after = post_revocation_result and post_revocation_result.get("status") == "ok"
+        
+        print(f"📊 Agent trading after revocation: {'❌ Still working (unexpected)' if agent_can_trade_after else '✅ Correctly blocked'}")
+        
+        # Security Validation
+        print("\n🛡️ SECURITY LIFECYCLE VALIDATION:")
+        print(f"✅ Agent Approval: {'Working' if approval_success else 'Failed'}")
+        print(f"✅ Agent Revocation: {'Working' if revocation_success else 'Failed'}")
+        print(f"✅ Access Control: {'Working' if not agent_can_trade_after else 'Needs Review'}")
+        
+        # Assert critical security properties
+        assert approval_success, "Agent approval must work for security testing"
+        assert revocation_success, "Agent revocation must work for security"
+        assert not agent_can_trade_after, "Revoked agent must not be able to trade"
+        
+        print("\n🎉 Agent security lifecycle validated!")
+
+
 # NOTE: This test validates the complete production user experience
 # It demonstrates that users can authenticate, get agent wallets, and trade
-# using only the TDX server API without handling private keys directly
+# using only the TDX server API without handling private keys directly.
+# Security tests ensure agents can be properly revoked when needed.

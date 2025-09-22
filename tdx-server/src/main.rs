@@ -26,7 +26,7 @@ use agents::AgentSessionManager;
 use config::Config;
 use preset_tdx::PresetTDXData;
 use proxy::HyperliquidProxy;
-use universal_signing::sign_exchange_request;
+use universal_signing::handle_with_sdk_complete;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -173,17 +173,17 @@ async fn proxy_exchange(
         .and_then(|value| value.to_str().ok())
         .ok_or(StatusCode::UNAUTHORIZED)?;
     
-    // Get agent private key for this API key
-    let private_key = if api_key == state.config.fixed_api_key {
-        // Use legacy agent for fixed API key
-        let agent_manager = state.agent_manager.read().await;
-        let key = agent_manager.get_private_key(api_key)
-            .ok_or(StatusCode::UNAUTHORIZED)?;
-        key.clone()
-    } else {
-        // Use preset agent for SIWE API keys
+    // Get agent private key - use the same preset TDX key for consistency
+    let private_key = {
         let preset_data = PresetTDXData::get()
             .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+        if api_key == state.config.fixed_api_key {
+            info!("🔑 Using preset TDX key for fixed API key (consistency)");
+        } else {
+            info!("🔑 Using preset TDX key for SIWE API key");
+        }
+        
         preset_data.agent_private_key.clone()
     };
     
@@ -216,30 +216,15 @@ async fn proxy_exchange(
     info!("📋 Vault: {:?}", vault_address);
     info!("📋 Mainnet: {}", is_mainnet);
     
-    // Sign the request using universal signing
-    match sign_exchange_request(&action, nonce, &private_key, vault_address, is_mainnet).await {
-        Ok(signature) => {
-            info!("✅ Universal signing successful");
-            
-            // Add signature to payload
-            payload["signature"] = signature.to_json();
-            payload["nonce"] = serde_json::Value::Number(nonce.into());
-            
-            // Forward the signed request to Hyperliquid API
-            match state.proxy.proxy_exchange_request(&payload).await {
-                Ok(response) => {
-                    info!("✅ Exchange request successful");
-                    Ok(Json(response))
-                }
-                Err(e) => {
-                    error!("❌ Exchange request failed: {:?}", e);
-                    Err(StatusCode::BAD_REQUEST)
-                }
-            }
+    // Handle the request completely with SDK (like TypeScript approach)
+    match handle_with_sdk_complete(&action, nonce, &private_key, vault_address, is_mainnet).await {
+        Ok(response) => {
+            info!("✅ SDK handled request completely");
+            Ok(Json(response))
         }
         Err(e) => {
-            error!("❌ Universal signing failed: {:?}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            error!("❌ SDK request handling failed: {:?}", e);
+            Err(StatusCode::BAD_REQUEST)
         }
     }
 }
