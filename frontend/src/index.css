@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  @apply bg-background text-text-primary font-work;
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-background;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-text-secondary rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-text-primary;
+}
+
+/* Glassmorphic card effect */
+.glass-card {
+  @apply bg-card border border-border-primary rounded-xl backdrop-blur-sm;
+}
+
+/* Button variants */
+.btn-primary {
+  @apply bg-white text-background px-4 py-2 rounded-xl font-medium hover:bg-opacity-90 transition-all;
+}
+
+.btn-secondary {
+  @apply bg-border-primary text-text-secondary px-4 py-2 rounded-xl font-medium border border-border-secondary hover:bg-border-secondary transition-all;
+}
+
+/* Loading spinner */
+.spinner {
+  @apply animate-spin rounded-full border-2 border-white/20 border-t-white;
+}
