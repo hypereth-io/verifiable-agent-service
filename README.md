@@ -1,6 +1,6 @@
 # HyperETH Verifiable Agent Service
 
-> **🏆 Submission for hlh.builders Hackathon**
+> **🏆 Submission for [hlh.builders](https://hlh.builders/) Hackathon**
 
 A secure implementation of Hyperliquid agent wallets hosted on remote Intel TDX (Trusted Execution Environment) machines, eliminating the need for users to store agent keys locally while maintaining verifiable security through on-chain attestation.
 
@@ -47,57 +47,32 @@ graph TB
 
 ## Demo Walkthrough
 
-### Step 1: Deploy Registry Contract
+### Step 1: Set Up TEE Server
 ```bash
-# Deploy the TEE attestation registry to HyperEVM
-cd contracts
-forge script script/Deploy.s.sol --broadcast --rpc-url hyperliquid_testnet
-```
-
-### Step 2: Set Up TEE Server
-```bash
-# Initialize the TDX server with attestation
+# Initialize and start the TDX server
 cd tdx-server
-cargo run --bin setup-attestation
+cargo run --bin server
+# Server will start on http://localhost:8080
 ```
 
-### Step 3: Register Agent in TEE
+### Step 2: Set Up Frontend
 ```bash
-# Generate agent wallet and register with attestation
-curl -X POST http://tdx-server:8080/register-agent \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "demo_user"}'
+# In a new terminal, start the React frontend
+cd frontend
+npm install
+npm run dev
+# Frontend will start on http://localhost:5173
 ```
 
-### Step 4: Submit Quote to Registry
-```bash
-# Register the TDX quote on-chain (returns agent address and API key from step 3)
-cast send $REGISTRY_ADDRESS "registerAgent(bytes)" $TDX_QUOTE_HEX \
-  --private-key $PRIVATE_KEY \
-  --rpc-url hyperliquid_testnet \
-  --value 0.01ether
-```
+### Step 3: Continue Demo in Frontend
+Open your browser to `http://localhost:5173` and use the web interface to:
 
-### Step 5: Verify Agent Registration
-```bash
-# Check if agent is registered on-chain
-cast call $REGISTRY_ADDRESS "isAgentRegistered(address)" $AGENT_ADDRESS \
-  --rpc-url hyperliquid_testnet
-```
+- **Register Agent**: Create a new agent wallet in the TEE environment
+- **View Agent Details**: See your agent address and API key
+- **Submit Trading Orders**: Place orders through the secure TEE proxy
+- **Monitor Activity**: Track your agent's trading activity
 
-### Step 6: Use API Key for Trading
-```bash
-# Use API key to interact with agent (no local keys needed)
-curl -X POST http://tdx-server:8080/exchange/order \
-  -H "X-API-Key: your_api_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "coin": "ETH", 
-    "is_buy": true, 
-    "sz": 0.1, 
-    "limit_px": 3000
-  }'
-```
+The frontend provides a complete interface for all agent wallet operations without requiring command-line interactions.
 
 ## Components
 
@@ -113,6 +88,12 @@ curl -X POST http://tdx-server:8080/exchange/order \
 - **Hyperliquid Integration**: Direct API proxy with automatic signing
 - **API Key Auth**: Secure access without exposing agent keys
 - **Request Routing**: Transparent passthrough for `/info`, interception for `/exchange`
+
+### 🌐 Frontend Interface (`/frontend`)
+- **React + Vite**: Modern web interface for agent wallet management
+- **Agent Registration**: User-friendly wizard for creating new agent wallets
+- **Trading Interface**: Intuitive forms for submitting Hyperliquid orders
+- **Real-time Updates**: Live monitoring of agent activity and trading status
 
 ### 📚 Documentation (`/docs`)
 - Architecture deep-dive
@@ -132,19 +113,7 @@ curl -X POST http://tdx-server:8080/exchange/order \
 - Intel TDX-enabled hardware (for production)
 - Foundry for smart contract development
 - Rust toolchain (1.70+) for server implementation
-
-### Quick Setup
-```bash
-# Clone and initialize
-git clone <repo>
-cd agent-wallet
-
-# Set up contracts
-cd contracts && forge install
-
-# Set up Rust server
-cd ../tdx-server && cargo build --release
-```
+- Node.js (18+) for frontend development
 
 ## Development Status
 
@@ -153,10 +122,14 @@ cd ../tdx-server && cargo build --release
 - [x] TDX protocol specification and data structures
 - [x] Automata DCAP integration on HyperEVM
 - [x] Comprehensive test suite
-- [ ] Server core functionality
-- [ ] API proxy implementation
-- [ ] Integration testing
-- [ ] Demo deployment
+- [x] Server core functionality
+- [x] API proxy implementation
+- [x] Integration testing
+- [x] Local deployment
+- [ ] TEE deployment
+- [ ] On-chain registry integration
+- [ ] Production hardening
+- [ ] Security audit
 
 ## Protocol Documentation
 
@@ -166,7 +139,7 @@ cd ../tdx-server && cargo build --release
 
 ## Contributing
 
-This project is built for the hlh.builders hackathon. For questions or collaboration, please open an issue.
+This project is built for the [hlh.builders](https://hlh.builders/) hackathon. For questions or collaboration, please open an issue.
 
 ## License
 
