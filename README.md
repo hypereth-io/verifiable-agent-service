@@ -4,7 +4,8 @@
 
 A secure implementation of Hyperliquid agent wallets hosted on remote Intel TDX (Trusted Execution Environment) machines, eliminating the need for users to store agent keys locally while maintaining verifiable security through on-chain attestation.
 
-A secure implementation of Hyperliquid agent wallets hosted on remote Intel TDX (Trusted Execution Environment) machines, eliminating the need for users to store agent keys locally while maintaining verifiable security through on-chain attestation.
+<img width="1512" height="949" alt="image" src="https://github.com/user-attachments/assets/0c0fc675-45a6-4a76-871f-94069c257ca2" />
+
 
 ## Overview
 
