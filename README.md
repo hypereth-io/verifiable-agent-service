@@ -160,8 +160,8 @@ cd ../tdx-server && cargo build --release
 
 ## Protocol Documentation
 
-- **[Protocol Specification](docs/PROTOCOL.md)**: Complete specification for embedding agent addresses in TDX quotes
-- **[Deployment Guide](docs/DEPLOYMENT.md)**: Contract addresses and deployment instructions
+- **[Protocol Specification](docs/protocol.md)**: Complete specification for embedding agent addresses in TDX quotes
+- **[Deployment Guide](docs/deployment.md)**: Contract addresses and deployment instructions
 - **[Smart Contracts](contracts/src/)**: Registry and helper contracts with full documentation
 
 ## Contributing

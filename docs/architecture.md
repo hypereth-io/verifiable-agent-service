@@ -4,20 +4,16 @@
 
 The TEE-Secured Hyperliquid Agent Wallet system consists of three main components that work together to provide secure, remote agent wallet management:
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   User Client   │    │   TEE Server     │    │ Smart Contract  │
-│                 │    │  (Intel TDX)     │    │   Registry      │
-├─────────────────┤    ├──────────────────┤    ├─────────────────┤
-│ • API Key Auth  │◄──►│ • Agent Keys     │    │ • Attestation   │
-│ • HTTP Requests │    │ • Auto-signing   │◄──►│   Verification  │
-│ • No Local Keys │    │ • API Proxy      │    │ • Agent Registry│
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │ Hyperliquid API │
-                       └─────────────────┘
+```mermaid
+graph TD
+    A[User Client<br/>• API Key Auth<br/>• HTTP Requests<br/>• No Local Keys] 
+    B[TEE Server<br/>Intel TDX<br/>• Agent Keys<br/>• Auto-signing<br/>• API Proxy]
+    C[Smart Contract Registry<br/>• Attestation Verification<br/>• Agent Registry]
+    D[Hyperliquid API]
+    
+    A <--> B
+    B <--> C
+    B --> D
 ```
 
 ## Component Details
@@ -75,24 +71,34 @@ The TEE-Secured Hyperliquid Agent Wallet system consists of three main component
 
 ### Agent Registration Flow
 
-```
-1. User → TDX Server: POST /register-agent
-2. TDX Server: Generate agent keypair in TEE
-3. TDX Server: Create attestation report
-4. TDX Server → Registry: Register agent with attestation
-5. Registry: Verify attestation and store mapping
-6. TDX Server → User: Return API key and agent address
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant T as TDX Server
+    participant R as Registry
+    
+    U->>T: POST /register-agent
+    T->>T: Generate agent keypair in TEE
+    T->>T: Create attestation report
+    T->>R: Register agent with attestation
+    R->>R: Verify attestation and store mapping
+    T->>U: Return API key and agent address
 ```
 
 ### Trading Request Flow
 
-```
-1. User → TDX Server: POST /exchange/order (with API key)
-2. TDX Server: Validate API key
-3. TDX Server: Sign request with agent key
-4. TDX Server → Hyperliquid: Submit signed request
-5. Hyperliquid → TDX Server: Response
-6. TDX Server → User: Forward response
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant T as TDX Server
+    participant H as Hyperliquid
+    
+    U->>T: POST /exchange/order (with API key)
+    T->>T: Validate API key
+    T->>T: Sign request with agent key
+    T->>H: Submit signed request
+    H->>T: Response
+    T->>U: Forward response
 ```
 
 ## Security Guarantees
@@ -133,32 +139,18 @@ The TEE-Secured Hyperliquid Agent Wallet system consists of three main component
 
 ### Production Deployment
 
-```
-┌─────────────────────────────────────────────────────┐
-│                Cloud Provider                       │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  ┌─────────────────────────────────────────────────┐│
-│  │            Intel TDX Instance               ││
-│  ├─────────────────────────────────────────────────┤│
-│  │                                             ││
-│  │  ┌─────────────┐    ┌──────────────┐      ││
-│  │  │ TDX Server  │    │ Load Balancer│      ││
-│  │  │             │    │              │      ││
-│  │  │ • Rust Core │    │ • Rate Limit │      ││
-│  │  │ • Python    │    │ • SSL Term   │      ││
-│  │  │ • Attest.   │    │ • Health     │      ││
-│  │  └─────────────┘    └──────────────┘      ││
-│  │                                             ││
-│  └─────────────────────────────────────────────────┘│
-│                                                     │
-└─────────────────────────────────────────────────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │ Hyperliquid     │
-                  │ Blockchain      │
-                  └─────────────────┘
+```mermaid
+graph TB
+    subgraph CP ["Cloud Provider"]
+        subgraph TDX ["Intel TDX Instance"]
+            TS["TDX Server<br/>• Rust Core<br/>• Python<br/>• Attestation"]
+            LB["Load Balancer<br/>• Rate Limit<br/>• SSL Term<br/>• Health"]
+        end
+    end
+    
+    HL["Hyperliquid<br/>Blockchain"]
+    
+    TDX --> HL
 ```
 
 ### Development Environment
