@@ -1,4 +1,4 @@
-# TEE-Secured Hyperliquid Agent Wallet
+# HyperETH Verifiable Agent Service
 
 > **🏆 Submission for hlh.builders Hackathon**
 
@@ -102,7 +102,7 @@ curl -X POST http://tdx-server:8080/exchange/order \
 ## Components
 
 ### 🔐 Smart Contract Registry (`/contracts`)
-- **Registry.sol**: Transparent append-only log of verified TEE agents
+- **Registry.sol**: Transparent append-only log of verified agents
 - **AttestationHelper.sol**: Library for parsing TDX quotes and extracting agent addresses
 - **TDXStructs.sol**: Data structures for Intel TDX attestation
 - Integrates with Automata DCAP v1.1 deployed on HyperEVM
@@ -153,7 +153,7 @@ cd ../tdx-server && cargo build --release
 - [x] TDX protocol specification and data structures
 - [x] Automata DCAP integration on HyperEVM
 - [x] Comprehensive test suite
-- [ ] TEE server core functionality
+- [ ] Server core functionality
 - [ ] API proxy implementation
 - [ ] Integration testing
 - [ ] Demo deployment
