@@ -8,20 +8,24 @@ export const REGISTRY_CONTRACT_ADDRESS = '0x...' // Update after deployment
 export const HYPERLIQUID_NETWORKS = {
   testnet: {
     name: 'Hyperliquid Testnet',
-    rpcUrl: 'https://api.hyperliquid-testnet.xyz/evm',
+    rpcUrl: 'https://rpc.hyperliquid-testnet.xyz/evm',
     chainId: 998,
   },
   mainnet: {
     name: 'Hyperliquid Mainnet', 
-    rpcUrl: 'https://api.hyperliquid.xyz/evm',
-    chainId: 42161,
+    rpcUrl: 'https://rpc.hyperliquid.xyz/evm',
+    chainId: 999,
   }
 }
+
+// Use mainnet by default
+export const DEFAULT_NETWORK = 'mainnet'
 
 // Application Steps
 export const STEPS = {
   WELCOME: 'welcome',
   REGISTER: 'register',
+  APPROVE: 'approve',
   VERIFY: 'verify', 
   DASHBOARD: 'dashboard',
   TRADING: 'trading'

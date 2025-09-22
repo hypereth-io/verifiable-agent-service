@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { useAppStore } from './stores/appStore'
 import Layout from './components/Layout/Layout'
 import RegisterAgent from './components/Registration/RegisterAgent'
+import ApproveAgent from './components/Registration/ApproveAgent'
 import VerifyOnChain from './components/Registration/VerifyOnChain'
 import AgentStatus from './components/Dashboard/AgentStatus'
 import TradingInterface from './components/Trading/TradingInterface'
@@ -139,6 +140,7 @@ function App() {
     const steps = [
       { key: 'welcome', label: 'Welcome', icon: '🏠' },
       { key: 'register', label: 'Register', icon: '📝' },
+      { key: 'approve', label: 'Approve', icon: '🔗' },
       { key: 'verify', label: 'Verify', icon: '✅' },
       { key: 'dashboard', label: 'Dashboard', icon: '📊' },
       { key: 'trading', label: 'Trading', icon: '💱' }
@@ -187,6 +189,8 @@ function App() {
         return <WelcomeScreen />
       case 'register':
         return <RegisterAgent />
+      case 'approve':
+        return <ApproveAgent />
       case 'verify':
         return <VerifyOnChain />
       case 'dashboard':

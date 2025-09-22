@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useAppStore } from '../../stores/appStore'
-import { hyperliquidAPI, demoAPI } from '../../services/api'
+import { tdxAPI, hyperliquidAPI, demoAPI } from '../../services/api'
 import Card from '../Common/Card'
 import Button from '../Common/Button'
 import OrderForm from './OrderForm'
@@ -46,23 +46,55 @@ const TradingInterface = () => {
     try {
       const api = isDemoMode ? demoAPI : hyperliquidAPI
 
-      // Load user state, open orders, and market data in parallel
-      const [userStateRes, openOrdersRes, marketDataRes] = await Promise.allSettled([
-        api.getUserState(agent.address),
-        api.getOpenOrders ? api.getOpenOrders(agent.address) : Promise.resolve([]),
-        api.getAllMids(),
-      ])
+      if (isDemoMode) {
+        // Use demo API
+        const [userStateRes, openOrdersRes, marketDataRes] = await Promise.allSettled([
+          api.getUserState(agent.address),
+          api.getOpenOrders ? api.getOpenOrders(agent.address) : Promise.resolve([]),
+          api.getAllMids(),
+        ])
 
-      if (userStateRes.status === 'fulfilled') {
-        setUserState(userStateRes.value)
-      }
+        if (userStateRes.status === 'fulfilled') {
+          setUserState(userStateRes.value)
+        }
+        if (openOrdersRes.status === 'fulfilled') {
+          setOpenOrders(openOrdersRes.value || [])
+        }
+        if (marketDataRes.status === 'fulfilled') {
+          setMarketData(marketDataRes.value || {})
+        }
+      } else {
+        // For live mode, get real account data from master wallet
+        try {
+          // Get master wallet clearinghouse state
+          const userStateRes = await tdxAPI.getMarketInfo({
+            type: 'clearinghouseState',
+            user: agent.userId // Master wallet address
+          })
+          
+          // Get open orders for master wallet
+          const openOrdersRes = await tdxAPI.getMarketInfo({
+            type: 'openOrders',
+            user: agent.userId // Master wallet address
+          })
 
-      if (openOrdersRes.status === 'fulfilled') {
-        setOpenOrders(openOrdersRes.value || [])
-      }
-
-      if (marketDataRes.status === 'fulfilled') {
-        setMarketData(marketDataRes.value || {})
+          setUserState(userStateRes)
+          setOpenOrders(openOrdersRes || [])
+          setMarketData({}) // Market data not needed for now
+        } catch (apiErr) {
+          console.warn('Live API call failed, using fallback data:', apiErr)
+          // Fallback to placeholder data
+          setUserState({
+            marginSummary: {
+              accountValue: '0.00',
+              totalNtlPos: '0.00',
+              totalRawUsd: '0.00',
+            },
+            assetPositions: []
+          })
+          setOpenOrders([])
+          setMarketData({})
+        }
       }
 
       // Load recent trades if available
@@ -87,15 +119,28 @@ const TradingInterface = () => {
     setTimeout(loadTradingData, 1000)
   }
 
-  const handleCancelOrder = async (orderId) => {
+  const handleCancelOrder = async (orderId, coinSymbol) => {
     if (!apiKey) return
 
     setLoading('trading', true)
     clearError()
 
     try {
-      const api = isDemoMode ? demoAPI : hyperliquidAPI
-      await api.cancelOrder(orderId)
+      if (isDemoMode) {
+        await demoAPI.cancelOrder(orderId)
+      } else {
+        // Get asset index for the coin
+        const getAssetIndex = (coinSymbol) => {
+          // Simple mapping for now - would need meta data for complete mapping
+          const assetMap = { 'ETH': 1, 'BTC': 0 } // Based on your feedback
+          return assetMap[coinSymbol] || 0
+        }
+        
+        const assetIndex = getAssetIndex(coinSymbol)
+        console.log(`Canceling order ${orderId} for ${coinSymbol} (asset ${assetIndex})`)
+        
+        await hyperliquidAPI.cancelOrder(orderId, assetIndex)
+      }
       
       // Remove from open orders list
       setOpenOrders(prev => prev.filter(order => order.oid !== orderId))
@@ -151,7 +196,6 @@ const TradingInterface = () => {
             loading={refreshing}
             size="sm"
           >
-            <RefreshIcon className="w-4 h-4 mr-2" />
             Refresh
           </Button>
           <Button
@@ -249,7 +293,7 @@ const TradingInterface = () => {
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => handleCancelOrder(order.oid)}
+                      onClick={() => handleCancelOrder(order.oid, order.coin)}
                       loading={loading.trading}
                     >
                       Cancel

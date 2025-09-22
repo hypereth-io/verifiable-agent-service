@@ -1,8 +1,24 @@
 import React, { useState } from 'react'
 import { useAppStore } from '../../stores/appStore'
 import { tdxAPI, demoAPI } from '../../services/api'
+import { ethers } from 'ethers'
 import Card from '../Common/Card'
 import Button from '../Common/Button'
+
+// Helper functions to extract data from TDX quote
+const extractMrenclave = (quoteHex) => {
+  // MRENCLAVE is at bytes 112-144 (32 bytes) in TDX quote structure
+  // Each byte is 2 hex chars, so position 224-288 in hex string
+  if (quoteHex.length < 288) return 'Invalid quote length'
+  return '0x' + quoteHex.slice(224, 288)
+}
+
+const extractMrsigner = (quoteHex) => {
+  // MRSIGNER is at bytes 176-208 (32 bytes) in TDX quote structure  
+  // Each byte is 2 hex chars, so position 352-416 in hex string
+  if (quoteHex.length < 416) return 'Invalid quote length'
+  return '0x' + quoteHex.slice(352, 416)
+}
 
 const RegisterAgent = () => {
   const {
@@ -20,11 +36,45 @@ const RegisterAgent = () => {
     isDemoMode,
   } = useAppStore()
 
-  const [localUserId, setLocalUserId] = useState(userId || '')
+  const [walletConnected, setWalletConnected] = useState(false)
+  const [walletAddress, setWalletAddress] = useState('')
+
+  const handleConnectWallet = async () => {
+    clearError()
+    setLoading('registration', true)
+
+    try {
+      if (isDemoMode) {
+        // Demo mode - simulate wallet connection
+        setWalletConnected(true)
+        setWalletAddress('0x742d35Cc6639C0532fEb5003cd2F8C3bB6e6b63')
+        setUserId('demo-user-' + Date.now())
+      } else {
+        // Connect to MetaMask with ethers.js
+        if (!window.ethereum) {
+          throw new Error('MetaMask is not installed')
+        }
+
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        await provider.send('eth_requestAccounts', [])
+        const signer = await provider.getSigner()
+        const address = await signer.getAddress()
+
+        setWalletConnected(true)
+        setWalletAddress(address)
+        setUserId(address)
+      }
+    } catch (err) {
+      console.error('Wallet connection failed:', err)
+      setError(err.message || 'Failed to connect wallet')
+    } finally {
+      setLoading('registration', false)
+    }
+  }
 
   const handleRegister = async () => {
-    if (!localUserId.trim()) {
-      setError('Please enter a user ID')
+    if (!walletConnected) {
+      setError('Please connect your wallet first')
       return
     }
 
@@ -32,29 +82,84 @@ const RegisterAgent = () => {
     setLoading('registration', true)
 
     try {
-      // Use demo API if in demo mode, otherwise use real TDX server
-      const api = isDemoMode ? demoAPI : tdxAPI
-      const response = await api.registerAgent(localUserId.trim())
+      if (isDemoMode) {
+        // Use demo API
+        const response = await demoAPI.registerAgent(walletAddress)
+        
+        setAgent({
+          address: response.agent_address,
+          userId: walletAddress,
+          createdAt: Date.now(),
+        })
+        setApiKey(response.api_key)
+        setAttestation(response.attestation_report)
+        sessionStorage.setItem('hypereth-api-key', response.api_key)
+      } else {
+        // Real SIWE authentication flow (simplified to avoid ethers/SIWE import issues)
+        console.log('Creating SIWE message for wallet:', walletAddress)
+        
+        // Create SIWE message manually following the API spec format
+        const domain = window.location.host
+        const uri = window.location.origin
+        const nonce = Math.random().toString(36).substring(2, 15)
+        const issuedAt = new Date().toISOString()
+        
+        const message = `${domain} wants you to sign in with your Ethereum account:
+${walletAddress}
 
-      // Store the results
-      setUserId(localUserId.trim())
-      setAgent({
-        address: response.agent_address,
-        userId: localUserId.trim(),
-        createdAt: Date.now(),
-      })
-      setApiKey(response.api_key)
-      setAttestation(response.attestation_report)
+Generate agent wallet for TEE-secured trading.
 
-      // Store API key in session storage for subsequent requests
-      sessionStorage.setItem('hypereth-api-key', response.api_key)
+URI: ${uri}
+Version: 1
+Chain ID: 1
+Nonce: ${nonce}
+Issued At: ${issuedAt}`
 
-      // Move to next step
-      setCurrentStep('verify')
+        console.log('SIWE message created:', message)
+        
+        // Sign the message using MetaMask directly
+        const signature = await window.ethereum.request({
+          method: 'personal_sign',
+          params: [message, walletAddress],
+        })
+        console.log('Message signed, calling TDX server...')
+        
+        // Send to TDX server for authentication
+        const loginResponse = await tdxAPI.agentsLogin(message, signature)
+        
+        if (loginResponse.success) {
+          console.log('SIWE login successful:', loginResponse)
+          
+          // Store agent data from SIWE response
+          setAgent({
+            address: loginResponse.agent_address,
+            userId: loginResponse.user_address,
+            createdAt: Date.now(),
+          })
+          setApiKey(loginResponse.api_key)
+          
+          // Use TDX quote from login response
+          setAttestation({
+            quote: loginResponse.tdx_quote_hex,
+            mrenclave: extractMrenclave(loginResponse.tdx_quote_hex),
+            mrsigner: extractMrsigner(loginResponse.tdx_quote_hex), 
+            timestamp: Date.now(),
+          })
+
+          // Store real API key for trading
+          sessionStorage.setItem('hypereth-api-key', loginResponse.api_key)
+          console.log('Stored real API key from SIWE login:', loginResponse.api_key)
+        } else {
+          throw new Error(loginResponse.message || 'SIWE authentication failed')
+        }
+      }
+
+      // Move to next step (approve agent)
+      setCurrentStep('approve')
     } catch (err) {
       console.error('Registration failed:', err)
       setError(
-        err.response?.data?.message || 
+        err.response?.data?.error || 
         err.message || 
         'Failed to register agent. Please try again.'
       )
@@ -63,10 +168,6 @@ const RegisterAgent = () => {
     }
   }
 
-  const handleSkipToDemo = () => {
-    // Pre-fill with demo data for quick testing
-    setLocalUserId('demo-user-' + Date.now())
-  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
@@ -85,22 +186,45 @@ const RegisterAgent = () => {
       >
         <div className="space-y-6">
 
-          {/* Registration Form */}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                User Identifier
-              </label>
-              <input
-                type="text"
-                value={localUserId}
-                onChange={(e) => setLocalUserId(e.target.value)}
-                placeholder="Enter your unique user ID"
-                className="w-full px-4 py-3 bg-border-primary border border-border-secondary rounded-xl text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-                disabled={loading.registration}
-              />
-              <p className="text-xs text-text-secondary mt-1">
-                This identifier will be associated with your agent wallet
+          {/* Wallet Connection & Registration */}
+          <div className="space-y-6">
+            {/* Step 1: Connect Wallet */}
+            <div className="space-y-3">
+              <h3 className="font-medium">1. Connect Ethereum Wallet</h3>
+              {!walletConnected ? (
+                <Button
+                  onClick={handleConnectWallet}
+                  loading={loading.registration && !walletConnected}
+                  className="w-full"
+                >
+                  Connect MetaMask Wallet
+                </Button>
+              ) : (
+                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <CheckIcon className="w-4 h-4 text-green-400" />
+                    <span className="text-sm font-medium text-green-400">Wallet Connected</span>
+                  </div>
+                  <p className="text-xs text-green-400/80 mt-1 font-mono">
+                    {walletAddress}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Step 2: Create Agent */}
+            <div className="space-y-3">
+              <h3 className="font-medium">2. Create TEE Agent</h3>
+              <Button
+                onClick={handleRegister}
+                loading={loading.registration && walletConnected}
+                disabled={!walletConnected}
+                className="w-full"
+              >
+                {loading.registration && walletConnected ? 'Creating Agent...' : 'Sign & Create Agent'}
+              </Button>
+              <p className="text-xs text-text-secondary">
+                You will be asked to sign a message to authenticate with the TEE server
               </p>
             </div>
 
@@ -109,27 +233,6 @@ const RegisterAgent = () => {
                 <p className="text-red-400 text-sm">{error}</p>
               </div>
             )}
-
-            <div className="flex gap-3">
-              <Button
-                onClick={handleRegister}
-                loading={loading.registration}
-                disabled={!localUserId.trim()}
-                className="flex-1"
-              >
-                {loading.registration ? 'Creating Agent...' : 'Register Agent'}
-              </Button>
-              
-              {!isDemoMode && (
-                <Button
-                  variant="secondary"
-                  onClick={handleSkipToDemo}
-                  disabled={loading.registration}
-                >
-                  Use Demo Data
-                </Button>
-              )}
-            </div>
           </div>
 
           {/* Demo Mode Notice */}

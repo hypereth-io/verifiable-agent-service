@@ -118,7 +118,7 @@ const Header = () => {
                     <img 
                       src={ChevronDownIcon} 
                       alt="Chevron Down" 
-                      className="block max-w-none size-full rotate-180" 
+                      className="block max-w-none size-full" 
                     />
                   </div>
                 </div>
@@ -146,7 +146,7 @@ const Header = () => {
                     <img 
                       src={ChevronDownIcon} 
                       alt="Chevron Down" 
-                      className="block max-w-none size-full rotate-180" 
+                      className="block max-w-none size-full" 
                     />
                   </div>
                 </div>

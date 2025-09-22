@@ -15,8 +15,11 @@ api.interceptors.request.use(
   (config) => {
     // Add API key to headers if available
     const apiKey = sessionStorage.getItem('hypereth-api-key')
+    console.log('API Interceptor - URL:', config.url, 'API Key:', apiKey ? 'present' : 'missing')
+    
     if (apiKey && config.url?.includes('/exchange')) {
       config.headers['X-API-Key'] = apiKey
+      console.log('Added X-API-Key header to exchange request')
     }
     return config
   },
@@ -45,29 +48,19 @@ export const tdxAPI = {
     return response.data
   },
 
-  // Register new agent in TEE (fallback to debug endpoint for now)
-  async registerAgent(userId) {
-    try {
-      const response = await api.post('/register-agent', { user_id: userId })
-      return response.data
-    } catch (error) {
-      if (error.response?.status === 404) {
-        // Fallback: use existing debug endpoint
-        console.warn('Register endpoint not available, using debug endpoint')
-        const debugResponse = await this.getAgentAddress()
-        return {
-          agent_address: debugResponse.agent_address,
-          api_key: debugResponse.api_key || 'test-key',
-          attestation_report: {
-            quote: '0x' + Buffer.from('mock-tdx-quote-for-' + debugResponse.agent_address).toString('hex'),
-            mrenclave: '0x' + Buffer.from('mock-mrenclave-measurement-hash').toString('hex'),
-            mrsigner: '0x' + Buffer.from('mock-mrsigner-authority-hash').toString('hex'),
-            timestamp: Date.now(),
-          }
-        }
-      }
-      throw error
-    }
+  // Agent authentication with SIWE
+  async agentsLogin(message, signature) {
+    const response = await api.post('/agents/login', { 
+      message, 
+      signature 
+    })
+    return response.data
+  },
+
+  // Get TDX quote data
+  async agentsQuote() {
+    const response = await api.get('/agents/quote')
+    return response.data
   },
 
   // Get agent address (debug endpoint)
@@ -124,10 +117,20 @@ export const hyperliquidAPI = {
 
   // Place order
   async placeOrder(orderData) {
+    // Convert frontend format to Hyperliquid API format
+    const hyperliquidOrder = {
+      a: 0, // Asset index (0 for ETH, would need mapping for other coins)
+      b: orderData.is_buy, // true = buy, false = sell
+      p: orderData.limit_px ? orderData.limit_px.toString() : "0", // Price as string
+      s: orderData.sz.toString(), // Size as string
+      r: orderData.reduce_only || false, // Reduce only flag
+      t: orderData.order_type === 'Market' ? { market: {} } : { limit: { tif: "Gtc" } }
+    }
+
     return tdxAPI.executeTrade({
       action: {
         type: 'order',
-        orders: [orderData],
+        orders: [hyperliquidOrder],
         grouping: 'na',
       },
       nonce: Date.now(),
@@ -135,11 +138,14 @@ export const hyperliquidAPI = {
   },
 
   // Cancel order
-  async cancelOrder(orderId) {
+  async cancelOrder(orderId, assetIndex = 0) {
     return tdxAPI.executeTrade({
       action: {
         type: 'cancel',
-        cancels: [orderId],
+        cancels: [{
+          a: assetIndex, // Asset index required
+          o: orderId,    // Order ID
+        }],
       },
       nonce: Date.now(),
     })

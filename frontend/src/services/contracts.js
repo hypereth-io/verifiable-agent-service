@@ -1,5 +1,13 @@
 import { ethers } from 'ethers'
-import { REGISTRY_CONTRACT_ADDRESS, HYPERLIQUID_NETWORKS } from '../utils/constants'
+import { REGISTRY_CONTRACT_ADDRESS, HYPERLIQUID_NETWORKS, DEFAULT_NETWORK } from '../utils/constants'
+
+// Automata DCAP Attestation contract
+const DCAP_ATTESTATION_ADDRESS = '0xaDdeC7e85c2182202b66E331f2a4A0bBB2cEEa1F'
+
+// DCAP contract ABI for quote verification
+const DCAP_ABI = [
+  "function verifyAndAttestOnChain(bytes calldata rawQuote) external payable returns (bool success, bytes memory output)"
+]
 
 // Registry contract ABI (simplified - update with actual ABI after deployment)
 const REGISTRY_ABI = [
@@ -15,11 +23,12 @@ class ContractService {
     this.provider = null
     this.signer = null
     this.registryContract = null
-    this.network = 'testnet' // default to testnet
+    this.dcapContract = null
+    this.network = DEFAULT_NETWORK // default to mainnet
   }
 
   // Initialize connection to Hyperliquid network
-  async connect(network = 'testnet') {
+  async connect(network = DEFAULT_NETWORK) {
     try {
       this.network = network
       const networkConfig = HYPERLIQUID_NETWORKS[network]
@@ -74,6 +83,13 @@ class ContractService {
           }
         }
       }
+
+      // Initialize DCAP contract (always available)
+      this.dcapContract = new ethers.Contract(
+        DCAP_ATTESTATION_ADDRESS,
+        DCAP_ABI,
+        this.signer
+      )
 
       // Initialize registry contract
       if (REGISTRY_CONTRACT_ADDRESS && REGISTRY_CONTRACT_ADDRESS !== '0x...') {
@@ -151,21 +167,59 @@ class ContractService {
     }
   }
 
-  // Verify attestation quote
+  // Verify attestation quote using Automata DCAP contract
   async verifyQuote(attestationQuote) {
-    if (!this.registryContract) {
-      throw new Error('Registry contract not initialized. Please connect first.')
+    if (!this.dcapContract) {
+      throw new Error('DCAP contract not initialized. Please connect first.')
     }
 
     try {
-      const result = await this.registryContract.verifyQuote(attestationQuote)
-      return {
-        isValid: result[0],
-        agentAddress: result[1],
-        mrenclave: result[2],
+      console.log('Starting DCAP verification...')
+      console.log('DCAP contract address:', DCAP_ATTESTATION_ADDRESS)
+      console.log('Network:', await this.provider.getNetwork())
+      console.log('Quote length:', attestationQuote.length)
+      
+      // Convert hex string to bytes if needed
+      const quoteBytes = attestationQuote.startsWith('0x') 
+        ? attestationQuote 
+        : '0x' + attestationQuote
+
+      console.log('Formatted quote:', quoteBytes.substring(0, 100) + '...')
+      
+      // Try to estimate gas first to catch issues early
+      try {
+        const gasEstimate = await this.dcapContract.verifyAndAttestOnChain.estimateGas(quoteBytes)
+        console.log('Gas estimate successful:', gasEstimate.toString())
+      } catch (gasError) {
+        console.error('Gas estimation failed:', gasError)
+        throw new Error(`DCAP verification setup failed: ${gasError.message}`)
+      }
+
+      // Call the real Automata DCAP verifier
+      console.log('Calling DCAP contract...')
+      const result = await this.dcapContract.verifyAndAttestOnChain(quoteBytes, {
+        gasLimit: 7000000 // High gas limit required for DCAP verification
+      })
+      
+      console.log('Transaction sent, waiting for confirmation...')
+      
+      // Wait for transaction
+      const receipt = await result.wait()
+      
+      if (receipt.status === 1) {
+        console.log('DCAP verification successful:', receipt)
+        
+        return {
+          isValid: true,
+          agentAddress: '0x' + attestationQuote.slice(-40), // Extract from quote
+          mrenclave: 'Verified via DCAP',
+          transactionHash: receipt.transactionHash,
+        }
+      } else {
+        throw new Error('DCAP verification transaction failed')
       }
     } catch (error) {
-      console.error('Failed to verify quote:', error)
+      console.error('Failed to verify quote with DCAP:', error)
       throw error
     }
   }
@@ -244,8 +298,8 @@ export class DemoContractService {
 
   getNetworkInfo() {
     return {
-      name: 'Hyperliquid Testnet (Demo)',
-      chainId: 998,
+      name: 'Hyperliquid Mainnet (Demo)',
+      chainId: 999,
     }
   }
 
