@@ -7,6 +7,11 @@ contracts/broadcast/
 # Rust
 tdx-server/target/
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
 # Python virtual environment
 .venv/
 __pycache__/
