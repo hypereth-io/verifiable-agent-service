@@ -277,7 +277,7 @@ The Registry contract is designed to be immutable for transparency. Consider the
 
 For deployment support and issues:
 
-1. **Protocol Questions**: See [PROTOCOL.md](./PROTOCOL.md)
+1. **Protocol Questions**: See [protocol.md](./protocol.md)
 2. **Contract Issues**: Check contract source and tests
 3. **Network Issues**: Consult HyperEVM documentation
 4. **Automata Issues**: Refer to [Automata DCAP documentation](https://github.com/automata-network/automata-dcap-attestation)
