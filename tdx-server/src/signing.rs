@@ -5,6 +5,8 @@ use ethers::{
     signers::{LocalWallet, Signer},
     types::Signature,
 };
+use hyperliquid_rust_sdk::{ExchangeClient, BaseUrl};
+use alloy::signers::local::PrivateKeySigner;
 
 #[derive(Debug)]
 pub struct ExchangeSignature {
@@ -31,7 +33,7 @@ impl ExchangeSignature {
     }
 }
 
-pub fn sign_exchange_request(
+pub async fn sign_exchange_request(
     action: &Value,
     nonce: u64,
     private_key: &SecretKey,
@@ -39,14 +41,62 @@ pub fn sign_exchange_request(
 ) -> Result<ExchangeSignature, Box<dyn std::error::Error + Send + Sync>> {
     info!("Signing exchange request with nonce: {}", nonce);
     
-    // Convert secp256k1::SecretKey to ethers::LocalWallet
+    // Convert secp256k1::SecretKey to ethers::LocalWallet for fallback
     let private_key_bytes = private_key.secret_bytes();
     let wallet = LocalWallet::from_bytes(&private_key_bytes)?;
     
     info!("Wallet address: {:?}", wallet.address());
     
-    // For now, let's implement a simplified version using ethers directly
-    // We'll create a message hash similar to how Hyperliquid does it
+    // Try Hyperliquid SDK signing first
+    match try_hyperliquid_sdk_signing(private_key, action, nonce, vault_address).await {
+        Ok(signature) => {
+            info!("✅ SDK signing successful");
+            Ok(signature)
+        }
+        Err(e) => {
+            error!("SDK signing failed: {:?}, falling back to simplified", e);
+            fallback_simplified_signing(&wallet, action, nonce)
+        }
+    }
+}
+
+async fn try_hyperliquid_sdk_signing(
+    private_key: &SecretKey,
+    action: &Value,
+    nonce: u64,
+    vault_address: Option<&str>,
+) -> Result<ExchangeSignature, Box<dyn std::error::Error + Send + Sync>> {
+    info!("🔐 Attempting Hyperliquid SDK signing...");
+    
+    // Convert secp256k1::SecretKey to alloy PrivateKeySigner (latest SDK supports alloy)
+    let private_key_hex = hex::encode(private_key.secret_bytes());
+    let wallet: PrivateKeySigner = private_key_hex.parse()?;
+    
+    info!("📋 Created alloy wallet for SDK: {:?}", wallet.address());
+    
+    // Create ExchangeClient with alloy wallet (latest SDK)
+    let exchange_client = ExchangeClient::new(
+        None,                    // No http client override
+        wallet,                 // Our agent wallet (alloy)
+        Some(BaseUrl::Mainnet), // Mainnet
+        None,                   // No vault address for now
+        None,                   // No meta override
+    ).await?;
+    
+    info!("📋 ExchangeClient created successfully with latest SDK");
+    
+    // TODO: Extract signing logic from ExchangeClient
+    // The SDK methods include full request flow, we need just the signing part
+    
+    Err("SDK signing extraction not yet implemented".into())
+}
+
+fn fallback_simplified_signing(
+    wallet: &LocalWallet,
+    action: &Value,
+    nonce: u64,
+) -> Result<ExchangeSignature, Box<dyn std::error::Error + Send + Sync>> {
+    info!("🔧 Using fallback simplified signing...");
     
     // Create a deterministic message from action + nonce for signing
     let message = format!("{}:{}", serde_json::to_string(action)?, nonce);
@@ -57,7 +107,7 @@ pub fn sign_exchange_request(
     
     let result = ExchangeSignature::from_ethers_signature(signature);
     
-    info!("Generated real signature: r={}, s={}, v={}", result.r, result.s, result.v);
+    info!("Generated fallback signature: r={}, s={}, v={}", result.r, result.s, result.v);
     
     Ok(result)
 }

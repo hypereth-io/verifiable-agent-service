@@ -21,8 +21,22 @@ pub async fn api_key_auth(
 
     match api_key {
         Some(key) => {
-            if key == state.config.fixed_api_key {
-                info!("Valid API key provided");
+            // Check both fixed API key and SIWE-generated API keys
+            let is_valid = if key == state.config.fixed_api_key {
+                info!("Valid fixed API key provided: {}", key);
+                true
+            } else {
+                // Check SIWE-generated API keys in session manager
+                let session_manager = state.session_manager.read().await;
+                if let Some(_session) = session_manager.get_session(key) {
+                    info!("Valid SIWE API key provided: {}", key);
+                    true
+                } else {
+                    false
+                }
+            };
+            
+            if is_valid {
                 Ok(next.run(request).await)
             } else {
                 warn!("Invalid API key provided: {}", key);

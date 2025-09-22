@@ -26,9 +26,14 @@ hex = "0.4"
 # HTTP client
 reqwest = { version = "0.12", features = ["json"] }
 
-# Hyperliquid Rust SDK
-hyperliquid_rust_sdk = "0.6.0"
+# Hyperliquid Rust SDK (latest master with alloy support)
+hyperliquid_rust_sdk = { git = "https://github.com/hyperliquid-dex/hyperliquid-rust-sdk", rev = "5aca1a08237f3c1d720b42d75bec40181b250e78" }
 ethers = "2.0"
+alloy = { version = "1.0", default-features = false, features = [
+  "dyn-abi",
+  "sol-types", 
+  "signer-local",
+] }
 
 # SIWE authentication
 siwe = "0.6"
